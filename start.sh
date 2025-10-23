@@ -1,0 +1,8 @@
+"#!/bin/bash"
+"set -e"
+""
+"echo \"Installing Python dependencies...\""
+"pip install -r requirements.txt"
+""
+"echo \"Starting application...\""
+"python main.py"
