@@ -1,0 +1,12 @@
+# Создайте файл .gitignore и добавьте в него:
+echo ".env" >> .gitignore
+echo "__pycache__/" >> .gitignore
+echo "*.pyc" >> .gitignore
+echo "*.pyo" >> .gitignore
+echo "*.pyd" >> .gitignore
+echo ".Python" >> .gitignore
+echo "*.sqlite" >> .gitignore
+echo "*.db" >> .gitignore
+echo "instance/" >> .gitignore
+echo ".webassets-cache" >> .gitignore
+echo "*.log" >> .gitignore
