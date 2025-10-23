@@ -17,6 +17,7 @@ class MiniAppAPI:
         self.setup_middlewares()
 
     def setup_routes(self):
+        # Основные маршруты API
         self.app.router.add_post('/api/user/{user_id}', self.handle_user)
         self.app.router.add_post('/api/daily_horoscope', self.handle_daily_horoscope)
         self.app.router.add_post('/api/weekly_horoscope', self.handle_weekly_horoscope)
@@ -26,11 +27,20 @@ class MiniAppAPI:
         self.app.router.add_post('/api/process_payment', self.handle_payment)
         self.app.router.add_post('/api/request_history', self.handle_request_history)
         
-        # Добавляем OPTIONS для CORS preflight
-        for route in list(self.app.router.routes()):
-            if route.method == 'POST':
-                path = route._path
-                self.app.router.add_route('OPTIONS', path, self.handle_options)
+        # OPTIONS для CORS preflight - явно указываем пути
+        routes_to_handle = [
+            '/api/user/{user_id}',
+            '/api/daily_horoscope',
+            '/api/weekly_horoscope', 
+            '/api/compatibility',
+            '/api/tarot',
+            '/api/natal_chart',
+            '/api/process_payment',
+            '/api/request_history'
+        ]
+        
+        for route_path in routes_to_handle:
+            self.app.router.add_route('OPTIONS', route_path, self.handle_options)
 
     def setup_middlewares(self):
         # CORS middleware
@@ -52,6 +62,7 @@ class MiniAppAPI:
     async def handle_options(self, request):
         return web.Response(status=200)
 
+    # Остальные методы оставляем без изменений...
     async def handle_user(self, request):
         """Получение данных пользователя"""
         try:

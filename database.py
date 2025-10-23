@@ -25,7 +25,7 @@ class Database:
                         birth_date TEXT,
                         birth_time TEXT,
                         birth_place TEXT,
-                        balance INTEGER DEFAULT 100,  # ⭐ ДОБАВЛЕНО: начальный баланс для тестирования
+                        balance INTEGER DEFAULT 100,
                         subscription_type TEXT DEFAULT 'free',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -62,7 +62,7 @@ class Database:
                     CREATE TABLE IF NOT EXISTS transactions (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER NOT NULL,
-                        type TEXT NOT NULL,  -- 'earn', 'spend', 'refund'
+                        type TEXT NOT NULL,
                         amount INTEGER NOT NULL,
                         description TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -89,7 +89,7 @@ class Database:
                     INSERT OR IGNORE INTO users 
                     (telegram_id, username, first_name, last_name, balance) 
                     VALUES (?, ?, ?, ?, ?)
-                ''', (telegram_id, username, first_name, last_name, 100))  # Начальный баланс 100 звезд
+                ''', (telegram_id, username, first_name, last_name, 100))
                 conn.commit()
                 return True
         except sqlite3.Error as e:
