@@ -17,40 +17,46 @@ class MiniAppAPI:
         self.setup_middlewares()
 
     def setup_routes(self):
-        self.app.router.add_post('/api/user/{user_id}', self.handle_user)
-        self.app.router.add_post('/api/daily_horoscope', self.handle_daily_horoscope)
-        self.app.router.add_post('/api/weekly_horoscope', self.handle_weekly_horoscope)
-        self.app.router.add_post('/api/compatibility', self.handle_compatibility)
-        self.app.router.add_post('/api/tarot', self.handle_tarot)
-        self.app.router.add_post('/api/natal_chart', self.handle_natal_chart)
-        self.app.router.add_post('/api/process_payment', self.handle_payment)
-        self.app.router.add_post('/api/request_history', self.handle_request_history)
+        """Настройка маршрутов API"""
+        # Основные маршруты
+        self.app.router.add_route('POST', '/api/user/{user_id}', self.handle_user)
+        self.app.router.add_route('POST', '/api/daily_horoscope', self.handle_daily_horoscope)
+        self.app.router.add_route('POST', '/api/weekly_horoscope', self.handle_weekly_horoscope)
+        self.app.router.add_route('POST', '/api/compatibility', self.handle_compatibility)
+        self.app.router.add_route('POST', '/api/tarot', self.handle_tarot)
+        self.app.router.add_route('POST', '/api/natal_chart', self.handle_natal_chart)
+        self.app.router.add_route('POST', '/api/process_payment', self.handle_payment)
+        self.app.router.add_route('POST', '/api/request_history', self.handle_request_history)
         
-        # Добавляем OPTIONS для CORS preflight
-        for route in list(self.app.router.routes()):
-            if route.method == 'POST':
-                path = route._path
-                self.app.router.add_route('OPTIONS', path, self.handle_options)
+        # OPTIONS для CORS
+        self.app.router.add_route('OPTIONS', '/api/user/{user_id}', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/daily_horoscope', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/weekly_horoscope', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/compatibility', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/tarot', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/natal_chart', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/process_payment', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/request_history', self.handle_options)
 
     def setup_middlewares(self):
-        # CORS middleware
+        """Настройка middleware для CORS"""
         @web.middleware
         async def cors_middleware(request, handler):
-            if request.method == 'OPTIONS':
-                response = web.Response()
-            else:
-                response = await handler(request)
-            
+            response = await handler(request)
             response.headers['Access-Control-Allow-Origin'] = '*'
             response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-            response.headers['Access-Control-Max-Age'] = '86400'
             return response
         
         self.app.middlewares.append(cors_middleware)
 
     async def handle_options(self, request):
-        return web.Response(status=200)
+        """Обработчик OPTIONS запросов для CORS"""
+        return web.Response(status=200, headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        })
 
     async def handle_user(self, request):
         """Получение данных пользователя"""
@@ -59,29 +65,23 @@ class MiniAppAPI:
             user = db.get_user(user_id)
             balance = await balance_service.get_balance(user_id)
             
-            if user:
-                user_data = {
-                    "success": True,
-                    "user": {
-                        "id": user[1],
-                        "name": user[3] or "Пользователь",
-                        "zodiac": user[6],
-                        "balance": balance,
-                        "is_admin": str(user_id) == str(ADMIN_ID)
-                    }
+            response_data = {
+                "success": True,
+                "user": {
+                    "id": user_id,
+                    "name": "Пользователь",
+                    "balance": balance,
+                    "is_admin": str(user_id) == str(ADMIN_ID)
                 }
-            else:
-                user_data = {
-                    "success": True,
-                    "user": {
-                        "id": user_id,
-                        "name": "Пользователь",
-                        "balance": balance,
-                        "is_admin": str(user_id) == str(ADMIN_ID)
-                    }
-                }
+            }
             
-            return web.json_response(user_data)
+            if user:
+                response_data["user"].update({
+                    "name": user[3] or "Пользователь",
+                    "zodiac": user[6]
+                })
+            
+            return web.json_response(response_data)
             
         except Exception as e:
             logger.error(f"Error in handle_user: {e}")
@@ -103,10 +103,7 @@ class MiniAppAPI:
                     "error": "Не указан знак зодиака"
                 }, status=400)
             
-            # Генерируем гороскоп через Gemini
             horoscope_text = await gemini_service.safe_generate_horoscope(zodiac_sign)
-            
-            # Логируем запрос
             db.log_request(user_id, f"daily_horoscope_{zodiac_sign}")
             
             return web.json_response({
@@ -135,32 +132,27 @@ class MiniAppAPI:
                     "error": "Не указан знак зодиака"
                 }, status=400)
             
-            # Для администратора услуга бесплатна
+            cost = 333
             if str(user_id) != str(ADMIN_ID):
-                # Проверяем баланс
-                if not await balance_service.can_afford(user_id, 333):
+                if not await balance_service.can_afford(user_id, cost):
                     return web.json_response({
                         "success": False,
-                        "error": "Недостаточно средств. Нужно 333 звезды."
+                        "error": f"Недостаточно средств. Нужно {cost} звезд."
                     }, status=402)
                 
-                # Списание средств
-                if not await balance_service.update_balance(user_id, 333, "subtract"):
+                if not await balance_service.update_balance(user_id, cost, "subtract"):
                     return web.json_response({
                         "success": False,
                         "error": "Ошибка списания средств"
                     }, status=500)
             
-            # Генерируем гороскоп
             horoscope_text = await gemini_service.generate_weekly_horoscope(zodiac_sign)
-            
-            # Логируем запрос
             db.log_request(user_id, f"weekly_horoscope_{zodiac_sign}")
             
             return web.json_response({
                 "success": True,
                 "content": horoscope_text,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else 333
+                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
             })
             
         except Exception as e:
@@ -184,32 +176,27 @@ class MiniAppAPI:
                     "error": "Не указаны знаки зодиака"
                 }, status=400)
             
-            # Для администратора услуга бесплатна
+            cost = 55
             if str(user_id) != str(ADMIN_ID):
-                # Проверяем баланс
-                if not await balance_service.can_afford(user_id, 55):
+                if not await balance_service.can_afford(user_id, cost):
                     return web.json_response({
                         "success": False,
-                        "error": "Недостаточно средств. Нужно 55 звезд."
+                        "error": f"Недостаточно средств. Нужно {cost} звезд."
                     }, status=402)
                 
-                # Списание средств
-                if not await balance_service.update_balance(user_id, 55, "subtract"):
+                if not await balance_service.update_balance(user_id, cost, "subtract"):
                     return web.json_response({
                         "success": False,
                         "error": "Ошибка списания средств"
                     }, status=500)
             
-            # Генерируем совместимость
             compatibility_text = await gemini_service.generate_compatibility(sign1, sign2)
-            
-            # Логируем запрос
             db.log_request(user_id, f"compatibility_{sign1}_{sign2}")
             
             return web.json_response({
                 "success": True,
                 "content": compatibility_text,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else 55
+                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
             })
             
         except Exception as e:
@@ -232,30 +219,24 @@ class MiniAppAPI:
                     "error": "Не указан тип расклада"
                 }, status=400)
             
-            # Для администратора услуга бесплатна
+            cost = 888
             if str(user_id) != str(ADMIN_ID):
-                # Проверяем баланс
-                if not await balance_service.can_afford(user_id, 888):
+                if not await balance_service.can_afford(user_id, cost):
                     return web.json_response({
                         "success": False,
-                        "error": "Недостаточно средств. Нужно 888 звезд."
+                        "error": f"Недостаточно средств. Нужно {cost} звезд."
                     }, status=402)
                 
-                # Списание средств
-                if not await balance_service.update_balance(user_id, 888, "subtract"):
+                if not await balance_service.update_balance(user_id, cost, "subtract"):
                     return web.json_response({
                         "success": False,
                         "error": "Ошибка списания средств"
                     }, status=500)
             
-            # Создаем расклад
             cards, positions = tarot_deck.create_spread(spread_type)
-            
-            # Генерируем интерпретацию
             spread_description = await self.create_tarot_prompt(spread_type, cards, positions)
             interpretation = await gemini_service.generate_tarot_reading(spread_type, spread_description)
             
-            # Форматируем карты для ответа
             formatted_cards = []
             for i, card in enumerate(cards):
                 formatted_cards.append({
@@ -264,14 +245,13 @@ class MiniAppAPI:
                     "meaning": tarot_deck.get_card_meaning(card)
                 })
             
-            # Логируем запрос
             db.log_request(user_id, f"tarot_{spread_type}")
             
             return web.json_response({
                 "success": True,
                 "cards": formatted_cards,
                 "interpretation": interpretation,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else 888
+                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
             })
             
         except Exception as e:
@@ -296,32 +276,27 @@ class MiniAppAPI:
                         "error": f"Не указано поле: {field}"
                     }, status=400)
             
-            # Для администратора услуга бесплатна
+            cost = 999
             if str(user_id) != str(ADMIN_ID):
-                # Проверяем баланс
-                if not await balance_service.can_afford(user_id, 999):
+                if not await balance_service.can_afford(user_id, cost):
                     return web.json_response({
                         "success": False,
-                        "error": "Недостаточно средств. Нужно 999 звезд."
+                        "error": f"Недостаточно средств. Нужно {cost} звезд."
                     }, status=402)
                 
-                # Списание средств
-                if not await balance_service.update_balance(user_id, 999, "subtract"):
+                if not await balance_service.update_balance(user_id, cost, "subtract"):
                     return web.json_response({
                         "success": False,
                         "error": "Ошибка списания средств"
                     }, status=500)
             
-            # Генерируем натальную карту
             natal_chart_text = await gemini_service.generate_natal_chart_interpretation(birth_data)
-            
-            # Логируем запрос
             db.log_request(user_id, "natal_chart")
             
             return web.json_response({
                 "success": True,
                 "content": natal_chart_text,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else 999
+                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
             })
             
         except Exception as e:
@@ -366,10 +341,20 @@ class MiniAppAPI:
             
             formatted_history = []
             for req in history:
+                cost = 0
+                if "weekly_horoscope" in req[0]:
+                    cost = 333
+                elif "compatibility" in req[0]:
+                    cost = 55
+                elif "tarot" in req[0]:
+                    cost = 888
+                elif "natal_chart" in req[0]:
+                    cost = 999
+                
                 formatted_history.append({
                     "service": req[0],
                     "date": req[1],
-                    "cost": self._get_service_cost(req[0])
+                    "cost": cost
                 })
             
             return web.json_response({
@@ -384,22 +369,7 @@ class MiniAppAPI:
                 "error": str(e)
             }, status=500)
 
-    def _get_service_cost(self, service_type: str):
-        """Получение стоимости услуги"""
-        costs = {
-            "daily_horoscope": 0,
-            "weekly_horoscope": 333,
-            "compatibility": 55,
-            "tarot": 888,
-            "natal_chart": 999
-        }
-        
-        for service, cost in costs.items():
-            if service in service_type:
-                return cost
-        return 0
-
-    async def create_tarot_prompt(self, spread_type: str, cards: list, positions: list):
+    async def create_tarot_prompt(self, spread_type, cards, positions):
         """Создание промпта для Gemini на основе выпавших карт"""
         spread_descriptions = {
             "celtic": "Кельтский крест - глубокий анализ текущей ситуации и ее развития",
@@ -408,11 +378,7 @@ class MiniAppAPI:
             "daily": "Карта дня - совет на сегодняшний день"
         }
         
-        prompt = f"""
-        Проинтерпретируй расклад Таро: {spread_descriptions.get(spread_type, spread_type)}
-        
-        Выпавшие карты и их позиции:
-        """
+        prompt = f"Проинтерпретируй расклад Таро: {spread_descriptions.get(spread_type, spread_type)}\n\nВыпавшие карты и их позиции:"
         
         for i, card in enumerate(cards):
             position = positions[i] if i < len(positions) else f"Позиция {i+1}"
@@ -421,8 +387,7 @@ class MiniAppAPI:
             prompt += f"\n- {position}: {card['name']} ({orientation} положение) - {meaning}"
         
         prompt += """
-        
-        Проанализируй:
+        \n\nПроанализируй:
         1. Общую энергетику расклада
         2. Значение каждой карты в ее позиции
         3. Взаимосвязи между картами
@@ -437,10 +402,14 @@ class MiniAppAPI:
 
     async def start(self):
         """Запуск API сервера"""
-        runner = web.AppRunner(self.app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 8080)
-        await site.start()
-        logger.info("✅ API сервер запущен на порту 8080")
+        try:
+            runner = web.AppRunner(self.app)
+            await runner.setup()
+            site = web.TCPSite(runner, '0.0.0.0', 8080)
+            await site.start()
+            logger.info("✅ API сервер запущен на порту 8080")
+        except Exception as e:
+            logger.error(f"❌ Ошибка запуска API сервера: {e}")
 
+# Создаем экземпляр API
 miniapp_api = MiniAppAPI()
