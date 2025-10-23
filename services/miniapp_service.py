@@ -1,3 +1,4 @@
+# services/miniapp_service.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import logging
 import json
 from typing import Dict, Any
@@ -9,12 +10,13 @@ logger = logging.getLogger(__name__)
 
 class MiniAppService:
     def __init__(self):
+        # СИНХРОНИЗИРУЕМ ЦЕНЫ С БОТОМ
         self.service_costs = {
             "daily_horoscope": 0,
-            "weekly_horoscope": 333,  # было 100
-            "compatibility": 55,      # было 50
-            "tarot": 888,             # было 80
-            "natal": 999              # было 200
+            "weekly_horoscope": 333,
+            "compatibility": 55,
+            "tarot": 888,
+            "natal": 999
         }
 
     async def process_miniapp_request(self, user_id: int, service_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -22,8 +24,8 @@ class MiniAppService:
         try:
             cost = self.service_costs.get(service_type, 0)
             
-            # Для администратора все услуги бесплатны
-            if cost > 0 and str(user_id) != str(ADMIN_ID):
+            # УБИРАЕМ ДЕМО-РЕЖИМ ДЛЯ АДМИНИСТРАТОРА
+            if cost > 0:
                 can_afford = await balance_service.can_afford(user_id, cost)
                 if not can_afford:
                     return {
@@ -44,7 +46,7 @@ class MiniAppService:
             return {
                 "success": True,
                 "message": "Запрос обработан",
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost,
+                "cost": cost,
                 "new_balance": await balance_service.get_balance(user_id)
             }
             

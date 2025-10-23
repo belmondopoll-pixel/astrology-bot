@@ -1,7 +1,7 @@
+# services/payment_service.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import logging
 from database import db
 from services.balance_service import balance_service
-from config import ADMIN_ID
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,10 @@ class PaymentService:
 
     async def process_payment(self, user_id: int, service_type: str) -> bool:
         """Обработать платеж за услугу"""
-        # Администратор получает все услуги бесплатно
-        if str(user_id) == str(ADMIN_ID):
-            logger.info(f"✅ Администратор {user_id} использует услугу {service_type} бесплатно")
-            return True
-            
         price = self.get_service_price(service_type)
         
-        # Проверяем баланс
+        # УБИРАЕМ ДЕМО-РЕЖИМ ДЛЯ АДМИНИСТРАТОРА
+        # Все пользователи платят, включая администратора
         if await balance_service.can_afford(user_id, price):
             # Списание средств
             if await balance_service.update_balance(user_id, price, "subtract"):
@@ -81,11 +77,8 @@ class PaymentService:
         price = self.get_service_price(service_type)
         current_balance = await self.check_user_balance(user_id)
         
-        # Для администратора показываем бесплатный доступ
-        if str(user_id) == str(ADMIN_ID):
-            instructions = f"⚡ АДМИНИСТРАТОР: Услуга '{description}' предоставляется бесплатно."
-        else:
-            instructions = f"Для оплаты услуги '{description}' требуется {price} Telegram Stars.\n\nВаш текущий баланс: {current_balance} звезд."
+        # УБИРАЕМ УСЛОВИЕ ДЛЯ АДМИНИСТРАТОРА
+        instructions = f"Для оплаты услуги '{description}' требуется {price} Telegram Stars.\n\nВаш текущий баланс: {current_balance} звезд."
         
         return {
             "service_type": service_type,

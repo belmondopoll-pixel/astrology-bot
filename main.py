@@ -1,3 +1,4 @@
+# main.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import asyncio
 import logging
 import os
@@ -21,8 +22,7 @@ try:
     from config import BOT_TOKEN
     from database import db
     from handlers.user_handlers import router
-    # Временно закомментируем API сервер
-    # from api.server import miniapp_api
+    from api.server import miniapp_api  # РАСКОММЕНТИРОВАТЬ!
 except ImportError as e:
     logger.error(f"❌ Ошибка импорта: {e}")
     import traceback
@@ -53,12 +53,12 @@ async def main():
         
         logger.info("✅ Бот инициализирован, запускаем поллинг...")
         
-        # Временно отключаем API сервер
-        # try:
-        #     asyncio.create_task(miniapp_api.start())
-        #     logger.info("✅ API сервер запущен на порту 8080")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ API сервер не запустился: {e}")
+        # ЗАПУСКАЕМ API СЕРВЕР - РАСКОММЕНТИРОВАТЬ!
+        try:
+            asyncio.create_task(miniapp_api.start())
+            logger.info("✅ API сервер запущен на порту 8080")
+        except Exception as e:
+            logger.warning(f"⚠️ API сервер не запустился: {e}")
         
         # Запуск бота
         await bot.delete_webhook(drop_pending_updates=True)

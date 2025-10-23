@@ -11,7 +11,6 @@ from services.gemini_service import gemini_service
 from services.payment_service import payment_service
 from utils.message_utils import split_message
 from services.tarot_deck import tarot_deck
-from config import ADMIN_ID
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +59,9 @@ async def compatibility_handler(message: Message, state: FSMContext):
 async def process_first_sign(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора первого знака для совместимости"""
     try:
+        # НЕМЕДЛЕННЫЙ ОТВЕТ НА CALLBACK
+        await callback.answer()
+        
         first_sign = callback.data.split("_")[2]
         
         await state.update_data(first_sign=first_sign)
@@ -78,6 +80,9 @@ async def process_first_sign(callback: CallbackQuery, state: FSMContext):
 async def process_second_sign(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора второго знака и генерация совместимости"""
     try:
+        # НЕМЕДЛЕННЫЙ ОТВЕТ НА CALLBACK
+        await callback.answer()
+        
         second_sign = callback.data.split("_")[2]
         user_data = await state.get_data()
         first_sign = user_data.get('first_sign')
@@ -87,7 +92,7 @@ async def process_second_sign(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             return
 
-        # Проверяем оплату (для администратора бесплатно)
+        # Проверяем оплату (УБРАН ДЕМО-РЕЖИМ ДЛЯ АДМИНИСТРАТОРА)
         if await payment_service.process_payment(callback.from_user.id, "compatibility"):
             # Логируем запрос
             db.log_request(callback.from_user.id, "compatibility")
@@ -102,12 +107,7 @@ async def process_second_sign(callback: CallbackQuery, state: FSMContext):
                 
                 # Разбиваем длинное сообщение на части
                 header = f"💑 <b>Совместимость: {first_sign} и {second_sign}</b>\n\n"
-                
-                # Добавляем информацию о стоимости для обычных пользователей
-                if str(callback.from_user.id) != str(ADMIN_ID):
-                    footer = "\n\n<i>Услуга оплачена (55 звезд)</i>"
-                else:
-                    footer = "\n\n<i>⚡ АДМИНИСТРАТОР: услуга предоставлена бесплатно</i>"
+                footer = "\n\n<i>Услуга оплачена (55 звезд)</i>"
                 
                 # Первая часть с заголовком
                 first_part = header + compatibility_text[:4000 - len(header + footer)] + footer
@@ -140,8 +140,6 @@ async def process_second_sign(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка в process_second_sign: {e}")
         await callback.message.edit_text("❌ Произошла ошибка при обработке запроса.")
-    
-    await callback.answer()
 
 @router.message(F.text == "📅 Гороскоп на неделю (333 звезды)")
 async def weekly_horoscope_handler(message: Message):
@@ -160,9 +158,12 @@ async def weekly_horoscope_handler(message: Message):
 async def process_weekly_horoscope(callback: CallbackQuery):
     """Обработчик генерации недельного гороскопа"""
     try:
+        # НЕМЕДЛЕННЫЙ ОТВЕТ НА CALLBACK
+        await callback.answer()
+        
         zodiac_sign = callback.data.split("_")[2]
         
-        # Проверяем оплату (для администратора бесплатно)
+        # Проверяем оплату (УБРАН ДЕМО-РЕЖИМ ДЛЯ АДМИНИСТРАТОРА)
         if await payment_service.process_payment(callback.from_user.id, "weekly_horoscope"):
             db.log_request(callback.from_user.id, "weekly_horoscope")
             
@@ -175,12 +176,7 @@ async def process_weekly_horoscope(callback: CallbackQuery):
                 
                 # Разбиваем длинное сообщение на части
                 header = f"📅 <b>Расширенный гороскоп на неделю для {zodiac_sign}</b>\n\n"
-                
-                # Добавляем информацию о стоимости для обычных пользователей
-                if str(callback.from_user.id) != str(ADMIN_ID):
-                    footer = "\n\n<i>Услуга оплачена (333 звезды)</i>"
-                else:
-                    footer = "\n\n<i>⚡ АДМИНИСТРАТОР: услуга предоставлена бесплатно</i>"
+                footer = "\n\n<i>Услуга оплачена (333 звезды)</i>"
                 
                 # Первая часть с заголовком
                 first_part = header + weekly_horoscope[:4000 - len(header + footer)] + footer
@@ -202,8 +198,6 @@ async def process_weekly_horoscope(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Ошибка в process_weekly_horoscope: {e}")
         await callback.message.edit_text("❌ Произошла ошибка")
-    
-    await callback.answer()
 
 @router.message(F.text == "🃏 Расклад Таро (888 звезд)")
 async def tarot_handler(message: Message):
@@ -223,6 +217,9 @@ async def tarot_handler(message: Message):
 async def process_tarot_spread(callback: CallbackQuery):
     """Обработчик выбора расклада Таро"""
     try:
+        # НЕМЕДЛЕННЫЙ ОТВЕТ НА CALLBACK
+        await callback.answer()
+        
         spread_type = callback.data.split("_")[1]
         
         spread_names = {
@@ -234,7 +231,7 @@ async def process_tarot_spread(callback: CallbackQuery):
         
         spread_name = spread_names.get(spread_type, "Выбранный расклад")
         
-        # Проверяем оплату (для администратора бесплатно)
+        # Проверяем оплату (УБРАН ДЕМО-РЕЖИМ ДЛЯ АДМИНИСТРАТОРА)
         if await payment_service.process_payment(callback.from_user.id, "tarot_reading"):
             db.log_request(callback.from_user.id, f"tarot_{spread_type}")
             
@@ -264,12 +261,7 @@ async def process_tarot_spread(callback: CallbackQuery):
                 
                 # Отправляем интерпретацию
                 interpretation_header = f"🔮 <b>Интерпретация расклада '{spread_name}'</b>\n\n"
-                
-                # Добавляем информацию о стоимости для обычных пользователей
-                if str(callback.from_user.id) != str(ADMIN_ID):
-                    footer = "\n\n<i>Услуга оплачена (888 звезд)</i>"
-                else:
-                    footer = "\n\n<i>⚡ АДМИНИСТРАТОР: услуга предоставлена бесплатно</i>"
+                footer = "\n\n<i>Услуга оплачена (888 звезд)</i>"
                 
                 full_interpretation = interpretation_header + tarot_reading + footer
                 
@@ -286,8 +278,6 @@ async def process_tarot_spread(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Ошибка в process_tarot_spread: {e}")
         await callback.message.edit_text("❌ Произошла ошибка")
-    
-    await callback.answer()
 
 async def create_tarot_prompt(spread_type: str, cards: List[Dict], positions: List[str]) -> str:
     """Создание промпта для Gemini на основе выпавших карт"""
@@ -381,7 +371,7 @@ async def process_birth_place(message: Message, state: FSMContext):
     birth_date = user_data.get('birth_date')
     birth_time = user_data.get('birth_time')
 
-    # Проверяем оплату (для администратора бесплатно)
+    # Проверяем оплату (УБРАН ДЕМО-РЕЖИМ ДЛЯ АДМИНИСТРАТОРА)
     if await payment_service.process_payment(message.from_user.id, "natal_chart"):
         # Логируем запрос
         db.log_request(message.from_user.id, "natal_chart")
@@ -409,12 +399,7 @@ async def process_birth_place(message: Message, state: FSMContext):
                 f"⏰ Время: {birth_time}\n"
                 f"📍 Место: {birth_place}\n\n"
             )
-            
-            # Добавляем информацию о стоимости для обычных пользователей
-            if str(message.from_user.id) != str(ADMIN_ID):
-                footer = "\n\n<i>Услуга оплачена (999 звезд)</i>"
-            else:
-                footer = "\n\n<i>⚡ АДМИНИСТРАТОР: услуга предоставлена бесплатно</i>"
+            footer = "\n\n<i>Услуга оплачена (999 звезд)</i>"
             
             # Первая часть с заголовком
             first_part = header + natal_chart_text[:4000 - len(header + footer)] + footer
