@@ -1,275 +1,72 @@
-# paid_services.py - ДОБАВЬТЕ ЛОГИРОВАНИЕ
+# handlers/paid_services.py
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, PreCheckoutQuery, SuccessfulPayment, LabeledPrice
+from aiogram.types import Message, CallbackQuery, LabeledPrice
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import logging
 
 from database import db
-from keyboards import zodiac_keyboard, tarot_spreads_keyboard, main_menu
+from keyboards import zodiac_keyboard, tarot_spreads_keyboard
 from services.gemini_service import gemini_service
 from services.tarot_deck import tarot_deck
-from utils.message_utils import split_message
 
 logger = logging.getLogger(__name__)
 
 router = Router()
-
-# Состояния для разных процессов
-class CompatibilityStates(StatesGroup):
-    waiting_for_second_sign = State()
-
-class WeeklyHoroscopeStates(StatesGroup):
-    waiting_for_sign = State()
 
 class NatalChartStates(StatesGroup):
     waiting_birth_date = State()
     waiting_birth_time = State()
     waiting_birth_place = State()
 
-class TarotStates(StatesGroup):
-    waiting_for_spread = State()
-
-# ==================== ОБРАБОТЧИКИ С РЕАЛЬНЫМИ ПЛАТЕЖАМИ ====================
+# ==================== ОБРАБОТЧИКИ ПЛАТНЫХ УСЛУГ ====================
 
 @router.message(F.text == "💑 Совместимость (55 Stars)")
-async def compatibility_handler(message: Message, state: FSMContext):
-    """Обработчик совместимости с реальной оплатой"""
+async def compatibility_handler(message: Message):
+    """Обработчик совместимости"""
     try:
-        logger.info(f"🔄 Обработчик совместимости вызван пользователем {message.from_user.id}")
+        logger.info(f"🔄 Совместимость вызвана пользователем {message.from_user.id}")
         
-        user_id = message.from_user.id
-        
-        # Создаем инвойс для оплаты
-        prices = [LabeledPrice(label="Анализ совместимости", amount=55)]
-        
-        logger.info(f"💰 Отправка инвойса для совместимости пользователю {user_id}")
-        
-        await message.bot.send_invoice(
-            chat_id=message.chat.id,
-            title="💑 Анализ совместимости",
-            description="Подробный анализ совместимости двух знаков зодиака",
-            payload="compatibility_payment",
-            provider_token="",  # Для Stars обычно не требуется
-            currency="XTR",  # Telegram Stars
-            prices=prices,
-            start_parameter="compatibility"
+        await message.answer(
+            "💑 <b>Анализ совместимости</b>\n\n"
+            "Выберите первый знак зодиака:",
+            reply_markup=zodiac_keyboard("compat_first")
         )
-        
-        await state.update_data(service_type="compatibility")
-        logger.info(f"✅ Инвойс для совместимости отправлен пользователю {user_id}")
         
     except Exception as e:
         logger.error(f"❌ Ошибка в compatibility_handler: {e}")
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
-@router.message(F.text == "📅 Гороскоп на неделю (333 Stars)")
-async def weekly_horoscope_handler(message: Message, state: FSMContext):
-    """Обработчик недельного гороскопа с реальной оплатой"""
-    try:
-        logger.info(f"🔄 Обработчик недельного гороскопа вызван пользователем {message.from_user.id}")
-        
-        user_id = message.from_user.id
-        
-        # Создаем инвойс для оплаты
-        prices = [LabeledPrice(label="Гороскоп на неделю", amount=333)]
-        
-        logger.info(f"💰 Отправка инвойса для недельного гороскопа пользователю {user_id}")
-        
-        await message.bot.send_invoice(
-            chat_id=message.chat.id,
-            title="📅 Гороскоп на неделю",
-            description="Расширенный гороскоп на 7 дней с детальными прогнозами",
-            payload="weekly_horoscope_payment",
-            provider_token="",
-            currency="XTR",
-            prices=prices,
-            start_parameter="weekly_horoscope"
-        )
-        
-        await state.update_data(service_type="weekly_horoscope")
-        logger.info(f"✅ Инвойс для недельного гороскопа отправлен пользователю {user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка в weekly_horoscope_handler: {e}")
-        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
-
-@router.message(F.text == "🃏 Расклад Таро (888 Stars)")
-async def tarot_handler(message: Message, state: FSMContext):
-    """Обработчик расклада Таро с реальной оплатой"""
-    try:
-        logger.info(f"🔄 Обработчик Таро вызван пользователем {message.from_user.id}")
-        
-        user_id = message.from_user.id
-        
-        # Создаем инвойс для оплаты
-        prices = [LabeledPrice(label="Расклад Таро", amount=888)]
-        
-        logger.info(f"💰 Отправка инвойса для Таро пользователю {user_id}")
-        
-        await message.bot.send_invoice(
-            chat_id=message.chat.id,
-            title="🃏 Расклад Таро",
-            description="Профессиональный расклад карт Таро с интерпретацией",
-            payload="tarot_payment",
-            provider_token="",
-            currency="XTR",
-            prices=prices,
-            start_parameter="tarot"
-        )
-        
-        await state.update_data(service_type="tarot")
-        logger.info(f"✅ Инвойс для Таро отправлен пользователю {user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка в tarot_handler: {e}")
-        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
-
-@router.message(F.text == "🌌 Натальная карта (999 Stars)")
-async def natal_chart_handler(message: Message, state: FSMContext):
-    """Обработчик натальной карты с реальной оплатой"""
-    try:
-        logger.info(f"🔄 Обработчик натальной карты вызван пользователем {message.from_user.id}")
-        
-        user_id = message.from_user.id
-        
-        # Создаем инвойс для оплаты
-        prices = [LabeledPrice(label="Натальная карта", amount=999)]
-        
-        logger.info(f"💰 Отправка инвойса для натальной карты пользователю {user_id}")
-        
-        await message.bot.send_invoice(
-            chat_id=message.chat.id,
-            title="🌌 Натальная карта",
-            description="Персональная натальная карта по дате рождения с анализом",
-            payload="natal_chart_payment",
-            provider_token="",
-            currency="XTR",
-            prices=prices,
-            start_parameter="natal_chart"
-        )
-        
-        await state.update_data(service_type="natal_chart")
-        logger.info(f"✅ Инвойс для натальной карты отправлен пользователю {user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка в natal_chart_handler: {e}")
-        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
-
-@router.pre_checkout_query()
-async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
-    """Обработка предварительного запроса платежа"""
-    logger.info(f"🔄 Pre-checkout запрос от пользователя {pre_checkout_query.from_user.id}")
-    await pre_checkout_query.answer(ok=True)
-    logger.info(f"✅ Pre-checkout запрос обработан")
-
-@router.message(F.successful_payment)
-async def successful_payment_handler(message: Message, state: FSMContext):
-    """Обработка успешного платежа"""
-    try:
-        logger.info(f"🔄 Обработка успешного платежа от пользователя {message.from_user.id}")
-        
-        payment = message.successful_payment
-        user_id = message.from_user.id
-        
-        # Определяем тип услуги по payload
-        payload = payment.invoice_payload
-        amount = payment.total_amount // 100  # Convert from cents
-        
-        logger.info(f"💰 Успешный платеж: {user_id} -> {payload} за {amount} Stars")
-        
-        # Логируем платеж в базу
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO payments (user_id, service_type, amount_stars, status, payment_data)
-                VALUES (?, ?, ?, 'completed', ?)
-            ''', (user_id, payload, amount, str(payment)))
-            conn.commit()
-        
-        logger.info(f"📊 Платеж записан в базу данных")
-        
-        # Предоставляем услугу в зависимости от типа
-        if payload == "compatibility_payment":
-            await message.answer(
-                "💑 <b>Оплата принята!</b>\n\n"
-                "Теперь выберите первый знак зодиака для анализа совместимости:",
-                reply_markup=zodiac_keyboard("compatibility_first_paid")
-            )
-            logger.info(f"✅ Начало процесса совместимости для пользователя {user_id}")
-            
-        elif payload == "weekly_horoscope_payment":
-            await message.answer(
-                "📅 <b>Оплата принята!</b>\n\n"
-                "Теперь выберите ваш знак зодиака для гороскопа на неделю:",
-                reply_markup=zodiac_keyboard("weekly_horoscope_paid")
-            )
-            logger.info(f"✅ Начало процесса недельного гороскопа для пользователя {user_id}")
-            
-        elif payload == "tarot_payment":
-            await message.answer(
-                "🃏 <b>Оплата принята!</b>\n\n"
-                "Теперь выберите тип расклада Таро:",
-                reply_markup=tarot_spreads_keyboard()
-            )
-            logger.info(f"✅ Начало процесса Таро для пользователя {user_id}")
-            
-        elif payload == "natal_chart_payment":
-            await message.answer(
-                "🌌 <b>Оплата принята!</b>\n\n"
-                "Для составления натальной карты мне понадобятся:\n"
-                "1. Дата рождения (ДД.ММ.ГГГГ)\n"
-                "2. Время рождения (ЧЧ:ММ)\n" 
-                "3. Место рождения (Город, Страна)\n\n"
-                "Введите дату рождения в формате ДД.ММ.ГГГГ:"
-            )
-            await state.set_state(NatalChartStates.waiting_birth_date)
-            logger.info(f"✅ Начало процесса натальной карты для пользователя {user_id}")
-            
-        await state.update_data(paid_service=payload)
-        logger.info(f"🎉 Услуга активирована для пользователя {user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка в successful_payment_handler: {e}")
-        await message.answer("❌ Произошла ошибка при обработке платежа.")
-
-# Обработчики для оплаченных услуг
-@router.callback_query(F.data.startswith("compatibility_first_paid_"))
-async def process_first_sign_paid(callback: CallbackQuery, state: FSMContext):
-    """Обработчик выбора первого знака для оплаченной совместимости"""
+@router.callback_query(F.data.startswith("compat_first_"))
+async def process_first_sign(callback: CallbackQuery, state: FSMContext):
+    """Обработчик первого знака"""
     try:
         await callback.answer()
+        sign = callback.data.split("_")[2]
         
-        first_sign = callback.data.split("_")[3]
-        await state.update_data(first_sign=first_sign)
-        
-        logger.info(f"🔄 Пользователь {callback.from_user.id} выбрал первый знак: {first_sign}")
+        await state.update_data(first_sign=sign)
         
         await callback.message.edit_text(
-            f"✅ Первый знак: <b>{first_sign}</b>\n\n"
-            "Теперь выберите второй знак зодиака:",
-            reply_markup=zodiac_keyboard("compatibility_second_paid")
+            f"✅ Первый знак: <b>{sign}</b>\n\n"
+            "Выберите второй знак зодиака:",
+            reply_markup=zodiac_keyboard("compat_second")
         )
+        
     except Exception as e:
-        logger.error(f"❌ Ошибка в process_first_sign_paid: {e}")
-        await callback.answer("❌ Ошибка выбора знака")
+        logger.error(f"❌ Ошибка в process_first_sign: {e}")
 
-@router.callback_query(F.data.startswith("compatibility_second_paid_"))
-async def process_second_sign_paid(callback: CallbackQuery, state: FSMContext):
-    """Обработчик выбора второго знака для оплаченной совместимости"""
+@router.callback_query(F.data.startswith("compat_second_"))
+async def process_second_sign(callback: CallbackQuery, state: FSMContext):
+    """Обработчик второго знака"""
     try:
         await callback.answer()
-        
-        second_sign = callback.data.split("_")[3]
+        second_sign = callback.data.split("_")[2]
         user_data = await state.get_data()
         first_sign = user_data.get('first_sign')
         user_id = callback.from_user.id
         
-        logger.info(f"🔄 Пользователь {user_id} выбрал второй знак: {second_sign}")
-        
         if not first_sign:
             await callback.message.edit_text("❌ Не выбран первый знак. Начните заново.")
-            await state.clear()
             return
 
         await callback.message.edit_text(
@@ -277,7 +74,7 @@ async def process_second_sign_paid(callback: CallbackQuery, state: FSMContext):
             f"<em>Это может занять несколько секунд</em>"
         )
         
-        # Предоставляем оплаченную услугу
+        # Предоставляем услугу
         compatibility_text = await gemini_service.generate_compatibility(first_sign, second_sign)
         
         await callback.message.edit_text(
@@ -293,26 +90,38 @@ async def process_second_sign_paid(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         
     except Exception as e:
-        logger.error(f"❌ Ошибка в process_second_sign_paid: {e}")
+        logger.error(f"❌ Ошибка в process_second_sign: {e}")
         await callback.message.edit_text("❌ Произошла ошибка при обработке запроса.")
 
-@router.callback_query(F.data.startswith("weekly_horoscope_paid_"))
-async def process_weekly_horoscope_paid(callback: CallbackQuery, state: FSMContext):
-    """Обработчик генерации оплаченного недельного гороскопа"""
+@router.message(F.text == "📅 Гороскоп на неделю (333 Stars)")
+async def weekly_horoscope_handler(message: Message):
+    """Обработчик недельного гороскопа"""
+    try:
+        logger.info(f"🔄 Недельный гороскоп вызван пользователем {message.from_user.id}")
+        
+        await message.answer(
+            "📅 <b>Гороскоп на неделю</b>\n\n"
+            "Выберите ваш знак зодиака:",
+            reply_markup=zodiac_keyboard("weekly_paid")
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в weekly_horoscope_handler: {e}")
+
+@router.callback_query(F.data.startswith("weekly_paid_"))
+async def process_weekly_horoscope(callback: CallbackQuery):
+    """Обработчик недельного гороскопа"""
     try:
         await callback.answer()
-        
-        zodiac_sign = callback.data.split("_")[3]
+        zodiac_sign = callback.data.split("_")[2]
         user_id = callback.from_user.id
-        
-        logger.info(f"🔄 Генерация недельного гороскопа для {zodiac_sign} пользователем {user_id}")
         
         await callback.message.edit_text(
             f"📅 <b>Генерирую гороскоп на неделю для {zodiac_sign}...</b>\n\n"
             f"<em>Это может занять несколько секунд</em>"
         )
         
-        # Предоставляем оплаченную услугу
+        # Предоставляем услугу
         horoscope_text = await gemini_service.generate_weekly_horoscope(zodiac_sign)
         
         await callback.message.edit_text(
@@ -325,22 +134,33 @@ async def process_weekly_horoscope_paid(callback: CallbackQuery, state: FSMConte
         db.log_request(user_id, f"weekly_horoscope_{zodiac_sign}", 333)
         logger.info(f"✅ Услуга недельного гороскопа предоставлена пользователю {user_id}")
         
-        await state.clear()
-        
     except Exception as e:
-        logger.error(f"❌ Ошибка в process_weekly_horoscope_paid: {e}")
+        logger.error(f"❌ Ошибка в process_weekly_horoscope: {e}")
         await callback.message.edit_text("❌ Произошла ошибка")
 
+@router.message(F.text == "🃏 Расклад Таро (888 Stars)")
+async def tarot_handler(message: Message):
+    """Обработчик расклада Таро"""
+    try:
+        logger.info(f"🔄 Таро вызвано пользователем {message.from_user.id}")
+        
+        await message.answer(
+            "🃏 <b>Расклад карт Таро</b>\n\n"
+            "Выберите тип расклада:",
+            reply_markup=tarot_spreads_keyboard()
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в tarot_handler: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+
 @router.callback_query(F.data.startswith("tarot_"))
-async def process_tarot_spread_paid(callback: CallbackQuery, state: FSMContext):
-    """Обработчик выбора расклада Таро для оплаченной услуги"""
+async def process_tarot_spread(callback: CallbackQuery):
+    """Обработчик расклада Таро"""
     try:
         await callback.answer()
-        
         spread_type = callback.data.split("_")[1]
         user_id = callback.from_user.id
-        
-        logger.info(f"🔄 Генерация расклада Таро {spread_type} для пользователя {user_id}")
         
         spread_names = {
             "celtic": "Кельтский крест",
@@ -356,7 +176,7 @@ async def process_tarot_spread_paid(callback: CallbackQuery, state: FSMContext):
             f"<em>Перемешиваю карты...</em>"
         )
         
-        # Предоставляем оплаченную услугу
+        # Предоставляем услугу
         cards, positions = tarot_deck.create_spread(spread_type)
         
         spread_description = ""
@@ -388,19 +208,35 @@ async def process_tarot_spread_paid(callback: CallbackQuery, state: FSMContext):
         db.log_request(user_id, f"tarot_{spread_type}", 888)
         logger.info(f"✅ Услуга Таро предоставлена пользователю {user_id}")
         
-        await state.clear()
-        
     except Exception as e:
-        logger.error(f"❌ Ошибка в process_tarot_spread_paid: {e}")
+        logger.error(f"❌ Ошибка в process_tarot_spread: {e}")
         await callback.message.edit_text("❌ Произошла ошибка")
 
-# Обработчики для натальной карты (уже оплаченной)
+@router.message(F.text == "🌌 Натальная карта (999 Stars)")
+async def natal_chart_handler(message: Message, state: FSMContext):
+    """Обработчик натальной карты"""
+    try:
+        logger.info(f"🔄 Натальная карта вызвана пользователем {message.from_user.id}")
+        
+        await message.answer(
+            "🌌 <b>Натальная карта</b>\n\n"
+            "Для составления натальной карты мне понадобятся:\n"
+            "1. Дата рождения (ДД.ММ.ГГГГ)\n"
+            "2. Время рождения (ЧЧ:ММ)\n" 
+            "3. Место рождения (Город, Страна)\n\n"
+            "Введите дату рождения в формате ДД.ММ.ГГГГ:"
+        )
+        
+        await state.set_state(NatalChartStates.waiting_birth_date)
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в natal_chart_handler: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+
 @router.message(NatalChartStates.waiting_birth_date)
-async def process_birth_date_paid(message: Message, state: FSMContext):
-    """Обработка даты рождения для оплаченной натальной карты"""
+async def process_birth_date(message: Message, state: FSMContext):
+    """Обработка даты рождения"""
     birth_date = message.text.strip()
-    
-    logger.info(f"🔄 Обработка даты рождения от пользователя {message.from_user.id}: {birth_date}")
     
     if not await validate_date_format(birth_date):
         await message.answer("❌ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например, 15.05.1990):")
@@ -411,11 +247,9 @@ async def process_birth_date_paid(message: Message, state: FSMContext):
     await message.answer("✅ Дата сохранена. Теперь введите время рождения в формате ЧЧ:ММ (например, 14:30):")
 
 @router.message(NatalChartStates.waiting_birth_time)
-async def process_birth_time_paid(message: Message, state: FSMContext):
-    """Обработка времени рождения для оплаченной натальной карты"""
+async def process_birth_time(message: Message, state: FSMContext):
+    """Обработка времени рождения"""
     birth_time = message.text.strip()
-    
-    logger.info(f"🔄 Обработка времени рождения от пользователя {message.from_user.id}: {birth_time}")
     
     if not await validate_time_format(birth_time):
         await message.answer("❌ Неверный формат времени. Пожалуйста, введите время в формате ЧЧ:ММ (например, 14:30):")
@@ -426,35 +260,28 @@ async def process_birth_time_paid(message: Message, state: FSMContext):
     await message.answer("✅ Время сохранено. Теперь введите место рождения (город, страна):")
 
 @router.message(NatalChartStates.waiting_birth_place)
-async def process_birth_place_paid(message: Message, state: FSMContext):
-    """Обработка места рождения и создание натальной карты для оплаченной услуги"""
+async def process_birth_place(message: Message, state: FSMContext):
+    """Обработка места рождения"""
     birth_place = message.text.strip()
     user_id = message.from_user.id
     user_data = await state.get_data()
-    
-    logger.info(f"🔄 Обработка места рождения от пользователя {user_id}: {birth_place}")
     
     if not birth_place:
         await message.answer("❌ Место рождения не может быть пустым. Пожалуйста, введите место рождения:")
         return
 
-    await state.update_data(birth_place=birth_place)
-    
-    birth_date = user_data.get('birth_date')
-    birth_time = user_data.get('birth_time')
-
     generating_msg = await message.answer(
         f"🌌 <b>Генерирую натальную карту...</b>\n\n"
-        f"<em>Дата: {birth_date}\n"
-        f"Время: {birth_time}\n"
+        f"<em>Дата: {user_data.get('birth_date')}\n"
+        f"Время: {user_data.get('birth_time')}\n"
         f"Место: {birth_place}</em>\n\n"
         "Это может занять несколько секунд."
     )
     
-    # Предоставляем оплаченную услугу
+    # Предоставляем услугу
     birth_data = {
-        'birth_date': birth_date,
-        'birth_time': birth_time, 
+        'birth_date': user_data.get('birth_date'),
+        'birth_time': user_data.get('birth_time'), 
         'birth_place': birth_place
     }
     
@@ -463,8 +290,8 @@ async def process_birth_place_paid(message: Message, state: FSMContext):
     await generating_msg.edit_text(
         f"🌌 <b>Ваша натальная карта</b>\n\n"
         f"<b>Данные:</b>\n"
-        f"📅 Дата: {birth_date}\n"
-        f"⏰ Время: {birth_time}\n"
+        f"📅 Дата: {user_data.get('birth_date')}\n"
+        f"⏰ Время: {user_data.get('birth_time')}\n"
         f"📍 Место: {birth_place}\n\n"
         f"{natal_chart_text}\n\n"
         f"<i>✅ Услуга оплачена • 999 Stars</i>"
