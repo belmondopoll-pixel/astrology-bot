@@ -1,5 +1,6 @@
+# user_handlers.py
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup, WebAppData, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, CallbackQuery, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, WebAppData
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -10,8 +11,6 @@ from database import db
 from keyboards import main_menu, zodiac_keyboard, web_app_keyboard, get_webapp_url
 from services.gemini_service import gemini_service
 from services.miniapp_service import miniapp_service
-from services.balance_service import balance_service
-from services.payment_service import payment_service
 
 # Импортируем обработчики платных услуг
 from .paid_services import router as paid_router
@@ -37,8 +36,12 @@ async def cmd_start(message: Message):
         last_name=message.from_user.last_name
     )
     
-    welcome_text = """
+    user_balance = db.get_user_balance(message.from_user.id)
+    
+    welcome_text = f"""
 🌟 <b>Добро пожаловать в АстроБот!</b> 🌟
+
+Ваш баланс: <b>{user_balance} Stars</b>
 
 Я ваш личный астрологический помощник. Вот что я умею:
 
@@ -47,12 +50,14 @@ async def cmd_start(message: Message):
 📚 Общая информация об астрологии
 
 <b>Платные услуги (Telegram Stars):</b>
-💑 Совместимость по знакам зодиака - 55 звёзд
-📅 Расширенный гороскоп на неделю - 333 звёзд  
-🌌 Натальная карта с интерпретацией - 999 звёзд
-🃏 Расклад карт Таро - 888 звёзд
+💑 Совместимость по знакам зодиака - 55 Stars
+📅 Расширенный гороскоп на неделю - 333 Stars  
+🌌 Натальная карта с интерпретацией - 999 Stars
+🃏 Расклад карт Таро - 888 Stars
 
-📱 <b>Новое!</b> Теперь доступно удобное MiniApp с красивым интерфейсом!
+💫 <i>Оплата услуг происходит списанием Stars с вашего баланса.</i>
+
+📱 <b>Также доступно удобное MiniApp с красивым интерфейсом!</b>
     """
     
     await message.answer(welcome_text, reply_markup=main_menu())
@@ -140,6 +145,29 @@ async def general_info_handler(message: Message):
     
     await message.answer(info_text)
 
+@router.message(Command("balance"))
+async def cmd_balance(message: Message):
+    """Показать баланс пользователя"""
+    user_balance = db.get_user_balance(message.from_user.id)
+    await message.answer(
+        f"💰 <b>Ваш баланс</b>\n\n"
+        f"Доступно: <b>{user_balance} Telegram Stars</b>\n\n"
+        f"Для пополнения баланса используйте команду /buy_tokens"
+    )
+
+@router.message(Command("buy_tokens"))
+async def cmd_buy_tokens(message: Message):
+    """Покупка токенов"""
+    await message.answer(
+        "💰 <b>Пополнение баланса</b>\n\n"
+        "Для пополнения баланса Telegram Stars:\n\n"
+        "1. Откройте чат с @BotFather\n"
+        "2. Выберите вашего бота\n"
+        "3. Нажмите \"Payments\"\n"
+        "4. Следуйте инструкциям для настройки платежей\n\n"
+        "После настройки пользователи смогут отправлять вам Stars напрямую через бота!"
+    )
+
 @router.message(Command("app"))
 async def cmd_app(message: Message):
     """Открыть MiniApp через команду"""
@@ -170,11 +198,6 @@ async def handle_web_app_data(message: Message):
                 db.update_user_zodiac(user_id, zodiac_sign)
                 await message.answer(f"✅ Знак зодиака обновлен: {zodiac_sign}")
                 
-        elif action == 'get_balance':
-            # Запрос баланса
-            balance = await balance_service.get_balance(user_id)
-            await message.answer(f"💰 Ваш баланс: {balance} звезд")
-            
         elif action == 'process_service':
             # Обработка услуги из MiniApp
             service_type = data.get('service_type')
@@ -187,7 +210,7 @@ async def handle_web_app_data(message: Message):
             )
             
             if result['success']:
-                await message.answer(f"✅ {service_type} выполнен! Стоимость: {result['cost']} звёзд\nНовый баланс: {result['new_balance']} звезд")
+                await message.answer(f"✅ {service_type} выполнен!")
             else:
                 await message.answer(f"❌ Ошибка: {result['error']}")
                 
@@ -197,171 +220,3 @@ async def handle_web_app_data(message: Message):
     except Exception as e:
         logger.error(f"Ошибка обработки WebApp данных: {e}")
         await message.answer("❌ Произошла ошибка при обработке данных из MiniApp")
-
-@router.message(F.text == "💎 Пополнить баланс")
-async def add_balance_handler(message: Message):
-    """Обработчик пополнения баланса"""
-    balance = await balance_service.get_balance(message.from_user.id)
-    
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="➕ 100 звезд", callback_data="deposit_100"),
-                InlineKeyboardButton(text="➕ 500 звезд", callback_data="deposit_500")
-            ],
-            [
-                InlineKeyboardButton(text="➕ 1000 звезд", callback_data="deposit_1000"),
-                InlineKeyboardButton(text="💳 Другая сумма", callback_data="deposit_custom")
-            ],
-            [
-                InlineKeyboardButton(text="📊 История операций", callback_data="balance_history")
-            ]
-        ]
-    )
-    
-    await message.answer(
-        f"💰 <b>Ваш баланс:</b> {balance} звезд\n\n"
-        "Выберите сумму для пополнения:",
-        reply_markup=keyboard
-    )
-
-@router.callback_query(F.data.startswith("deposit_"))
-async def process_deposit(callback: CallbackQuery):
-    """Обработчик выбора суммы пополнения"""
-    try:
-        # НЕМЕДЛЕННЫЙ ОТВЕТ НА CALLBACK
-        await callback.answer()
-        
-        data = callback.data
-        user_id = callback.from_user.id
-        
-        if data == "deposit_custom":
-            await callback.message.answer(
-                "💳 <b>Пополнение произвольной суммы</b>\n\n"
-                "Введите сумму в звездах (от 10 до 5000):"
-            )
-            return
-        
-        # Извлекаем сумму из callback_data
-        amount = int(data.split("_")[1])
-        
-        # Пополняем баланс
-        if await payment_service.add_funds(user_id, amount):
-            new_balance = await balance_service.get_balance(user_id)
-            await callback.message.edit_text(
-                f"✅ <b>Баланс пополнен!</b>\n\n"
-                f"💫 Начислено: +{amount} звезд\n"
-                f"💰 Теперь у вас: {new_balance} звезд"
-            )
-        else:
-            await callback.message.edit_text(
-                "❌ <b>Ошибка пополнения</b>\n\n"
-                "Пожалуйста, попробуйте позже."
-            )
-            
-    except Exception as e:
-        logger.error(f"Ошибка в process_deposit: {e}")
-        await callback.answer("❌ Ошибка пополнения")
-
-@router.callback_query(F.data == "balance_history")
-async def show_balance_history(callback: CallbackQuery):
-    """Показать историю операций"""
-    try:
-        # НЕМЕДЛЕННЫЙ ОТВЕТ НА CALLBACK
-        await callback.answer()
-        
-        user_id = callback.from_user.id
-        history = db.get_user_requests(user_id, limit=10)
-        
-        if not history:
-            await callback.message.answer("📊 История операций пуста")
-            return
-            
-        history_text = "📊 <b>История ваших операций:</b>\n\n"
-        
-        for i, req in enumerate(history, 1):
-            service_type = req[0]
-            date = req[1]
-            cost = req[2] if len(req) > 2 else 0
-            
-            # Определяем тип услуги
-            if "compatibility" in service_type:
-                service_name = "💑 Совместимость"
-                cost = 55
-            elif "weekly_horoscope" in service_type:
-                service_name = "📅 Недельный гороскоп" 
-                cost = 333
-            elif "tarot" in service_type:
-                service_name = "🃏 Расклад Таро"
-                cost = 888
-            elif "natal_chart" in service_type:
-                service_name = "🌌 Натальная карта"
-                cost = 999
-            elif "daily_horoscope" in service_type:
-                service_name = "♈ Ежедневный гороскоп"
-                cost = 0
-            else:
-                service_name = service_type
-                
-            history_text += f"{i}. {service_name} - {cost} звезд\n"
-            history_text += f"   📅 {date}\n\n"
-        
-        await callback.message.answer(history_text)
-        
-    except Exception as e:
-        logger.error(f"Ошибка показа истории: {e}")
-        await callback.answer("❌ Ошибка загрузки истории")
-
-@router.message(F.text == "💰 Мой баланс")
-async def balance_handler(message: Message):
-    """Показать баланс пользователя"""
-    stats = await balance_service.get_balance_stats(message.from_user.id)
-    
-    balance_text = f"""
-💰 <b>Ваш баланс</b>
-
-⭐ <b>Текущий баланс:</b> {stats['balance']} звезд
-📈 <b>Всего получено:</b> {stats['total_earned']} звезд
-📉 <b>Всего потрачено:</b> {stats['total_spent']} звезд
-
-💡 Звезды можно использовать для:
-• Совместимость - 55 звезд
-• Недельный гороскоп - 333 звезд
-• Расклад Таро - 888 звезд
-• Натальная карта - 999 звезд
-    """
-    
-    await message.answer(balance_text)
-
-# Обработчик произвольной суммы пополнения
-@router.message(F.text.regexp(r'^\d+$'))
-async def process_custom_deposit(message: Message):
-    """Обработка произвольной суммы пополнения"""
-    try:
-        amount = int(message.text)
-        user_id = message.from_user.id
-        
-        if amount < 10:
-            await message.answer("❌ Минимальная сумма пополнения: 10 звезд")
-            return
-            
-        if amount > 5000:
-            await message.answer("❌ Максимальная сумма пополнения: 5000 звезд")
-            return
-            
-        # Пополняем баланс
-        if await payment_service.add_funds(user_id, amount):
-            new_balance = await balance_service.get_balance(user_id)
-            await message.answer(
-                f"✅ <b>Баланс пополнен!</b>\n\n"
-                f"💫 Начислено: +{amount} звезд\n"
-                f"💰 Теперь у вас: {new_balance} звезд"
-            )
-        else:
-            await message.answer("❌ Ошибка пополнения баланса")
-            
-    except ValueError:
-        await message.answer("❌ Пожалуйста, введите число (например: 500)")
-    except Exception as e:
-        logger.error(f"Ошибка пополнения: {e}")
-        await message.answer("❌ Произошла ошибка при пополнении баланса")

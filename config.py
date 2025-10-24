@@ -17,3 +17,8 @@ if not GEMINI_API_KEY:
     print("❌ ОШИБКА: GEMINI_API_KEY не найден в .env файле")
     print("💡 Получите API ключ на https://aistudio.google.com/ и добавьте в .env:")
     print("GEMINI_API_KEY=ваш_gemini_api_ключ")
+
+if not ADMIN_ID:
+    print("⚠️  ВНИМАНИЕ: ADMIN_ID не настроен")
+    print("💡 Получите ваш ID у @userinfobot и добавьте в .env:")
+    print("ADMIN_ID=ваш_telegram_id")

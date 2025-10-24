@@ -1,16 +1,14 @@
-# services/miniapp_service.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# services/miniapp_service.py
 import logging
-import json
 from typing import Dict, Any
 from database import db
-from services.balance_service import balance_service
+from services.direct_payment_service import direct_payment_service
 from config import ADMIN_ID
 
 logger = logging.getLogger(__name__)
 
 class MiniAppService:
     def __init__(self):
-        # СИНХРОНИЗИРУЕМ ЦЕНЫ С БОТОМ
         self.service_costs = {
             "daily_horoscope": 0,
             "weekly_horoscope": 333,
@@ -22,32 +20,21 @@ class MiniAppService:
     async def process_miniapp_request(self, user_id: int, service_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Обработка запроса из MiniApp"""
         try:
-            cost = self.service_costs.get(service_type, 0)
+            # Для администратора - всегда успех
+            if str(user_id) == str(ADMIN_ID):
+                return {
+                    "success": True,
+                    "message": "Запрос обработан (демо-режим)",
+                    "cost": 0,
+                    "demo_mode": True
+                }
             
-            # УБИРАЕМ ДЕМО-РЕЖИМ ДЛЯ АДМИНИСТРАТОРА
-            if cost > 0:
-                can_afford = await balance_service.can_afford(user_id, cost)
-                if not can_afford:
-                    return {
-                        "success": False,
-                        "error": f"Недостаточно средств. Нужно {cost} звезд."
-                    }
-                
-                # Списание средств
-                if not await balance_service.update_balance(user_id, cost, "subtract"):
-                    return {
-                        "success": False,
-                        "error": "Ошибка списания средств"
-                    }
-            
-            # Логируем запрос
-            db.log_request(user_id, f"miniapp_{service_type}")
-            
+            # Для обычных пользователей - требуется оплата
             return {
                 "success": True,
-                "message": "Запрос обработан",
-                "cost": cost,
-                "new_balance": await balance_service.get_balance(user_id)
+                "message": "Требуется оплата услуги",
+                "cost": self.service_costs.get(service_type, 0),
+                "payment_required": True
             }
             
         except Exception as e:
@@ -61,28 +48,26 @@ class MiniAppService:
         """Получение данных пользователя для MiniApp"""
         try:
             user = db.get_user(user_id)
-            balance = await balance_service.get_balance(user_id)
             
-            if user:
-                return {
-                    "id": user[1],
-                    "name": user[3] or "Пользователь",
-                    "zodiac": user[6],
-                    "balance": balance,
-                    "is_admin": str(user_id) == str(ADMIN_ID)
-                }
-            return {
+            user_data = {
                 "id": user_id,
                 "name": "Пользователь",
-                "balance": balance,
                 "is_admin": str(user_id) == str(ADMIN_ID)
             }
+            
+            if user:
+                user_data.update({
+                    "name": user[3] or "Пользователь",
+                    "zodiac": user[6] or "Не указан"
+                })
+            
+            return user_data
+            
         except Exception as e:
             logger.error(f"Ошибка получения данных пользователя: {e}")
             return {
                 "id": user_id,
                 "name": "Пользователь",
-                "balance": 0,
                 "is_admin": False
             }
 

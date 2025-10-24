@@ -1,10 +1,9 @@
+# api/server.py
 import logging
 from aiohttp import web
 import json
 from database import db
 from services.gemini_service import gemini_service
-from services.balance_service import balance_service
-from services.payment_service import payment_service
 from services.tarot_deck import tarot_deck
 from config import ADMIN_ID
 
@@ -25,8 +24,9 @@ class MiniAppAPI:
         self.app.router.add_route('POST', '/api/compatibility', self.handle_compatibility)
         self.app.router.add_route('POST', '/api/tarot', self.handle_tarot)
         self.app.router.add_route('POST', '/api/natal_chart', self.handle_natal_chart)
-        self.app.router.add_route('POST', '/api/process_payment', self.handle_payment)
         self.app.router.add_route('POST', '/api/request_history', self.handle_request_history)
+        self.app.router.add_route('POST', '/api/check_payment', self.handle_check_payment)
+        self.app.router.add_route('POST', '/api/confirm_payment', self.handle_confirm_payment)
         
         # OPTIONS для CORS
         self.app.router.add_route('OPTIONS', '/api/user/{user_id}', self.handle_options)
@@ -35,17 +35,23 @@ class MiniAppAPI:
         self.app.router.add_route('OPTIONS', '/api/compatibility', self.handle_options)
         self.app.router.add_route('OPTIONS', '/api/tarot', self.handle_options)
         self.app.router.add_route('OPTIONS', '/api/natal_chart', self.handle_options)
-        self.app.router.add_route('OPTIONS', '/api/process_payment', self.handle_options)
         self.app.router.add_route('OPTIONS', '/api/request_history', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/check_payment', self.handle_options)
+        self.app.router.add_route('OPTIONS', '/api/confirm_payment', self.handle_options)
 
     def setup_middlewares(self):
         """Настройка middleware для CORS"""
         @web.middleware
         async def cors_middleware(request, handler):
-            response = await handler(request)
+            if request.method == 'OPTIONS':
+                response = web.Response()
+            else:
+                response = await handler(request)
+            
             response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
             return response
         
         self.app.middlewares.append(cors_middleware)
@@ -54,8 +60,9 @@ class MiniAppAPI:
         """Обработчик OPTIONS запросов для CORS"""
         return web.Response(status=200, headers={
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+            'Access-Control-Allow-Credentials': 'true'
         })
 
     async def handle_user(self, request):
@@ -63,14 +70,14 @@ class MiniAppAPI:
         try:
             user_id = int(request.match_info['user_id'])
             user = db.get_user(user_id)
-            balance = await balance_service.get_balance(user_id)
+            user_balance = db.get_user_balance(user_id) if user else 100
             
             response_data = {
                 "success": True,
                 "user": {
                     "id": user_id,
                     "name": "Пользователь",
-                    "balance": balance,
+                    "balance": user_balance,
                     "is_admin": str(user_id) == str(ADMIN_ID)
                 }
             }
@@ -78,7 +85,7 @@ class MiniAppAPI:
             if user:
                 response_data["user"].update({
                     "name": user[3] or "Пользователь",
-                    "zodiac": user[6]
+                    "zodiac": user[6] or "Не указан"
                 })
             
             return web.json_response(response_data)
@@ -132,29 +139,34 @@ class MiniAppAPI:
                     "error": "Не указан знак зодиака"
                 }, status=400)
             
+            # Проверяем баланс пользователя
             cost = 333
-            if str(user_id) != str(ADMIN_ID):
-                if not await balance_service.can_afford(user_id, cost):
-                    return web.json_response({
-                        "success": False,
-                        "error": f"Недостаточно средств. Нужно {cost} звезд."
-                    }, status=402)
+            user_balance = db.get_user_balance(user_id)
+            
+            if user_balance < cost:
+                return web.json_response({
+                    "success": False,
+                    "error": f"Недостаточно средств. Нужно {cost} Stars, у вас {user_balance} Stars.",
+                    "payment_required": True,
+                    "cost": cost
+                }, status=402)
+            
+            # Списываем средства
+            if db.update_balance(user_id, -cost):
+                horoscope_text = await gemini_service.generate_weekly_horoscope(zodiac_sign)
+                db.log_request(user_id, f"weekly_horoscope_{zodiac_sign}", cost)
                 
-                if not await balance_service.update_balance(user_id, cost, "subtract"):
-                    return web.json_response({
-                        "success": False,
-                        "error": "Ошибка списания средств"
-                    }, status=500)
-            
-            horoscope_text = await gemini_service.generate_weekly_horoscope(zodiac_sign)
-            db.log_request(user_id, f"weekly_horoscope_{zodiac_sign}")
-            
-            return web.json_response({
-                "success": True,
-                "content": horoscope_text,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
-            })
-            
+                return web.json_response({
+                    "success": True,
+                    "content": horoscope_text,
+                    "cost": cost
+                })
+            else:
+                return web.json_response({
+                    "success": False,
+                    "error": "Ошибка списания средств"
+                }, status=500)
+                
         except Exception as e:
             logger.error(f"Error in handle_weekly_horoscope: {e}")
             return web.json_response({
@@ -176,29 +188,34 @@ class MiniAppAPI:
                     "error": "Не указаны знаки зодиака"
                 }, status=400)
             
+            # Проверяем баланс пользователя
             cost = 55
-            if str(user_id) != str(ADMIN_ID):
-                if not await balance_service.can_afford(user_id, cost):
-                    return web.json_response({
-                        "success": False,
-                        "error": f"Недостаточно средств. Нужно {cost} звезд."
-                    }, status=402)
+            user_balance = db.get_user_balance(user_id)
+            
+            if user_balance < cost:
+                return web.json_response({
+                    "success": False,
+                    "error": f"Недостаточно средств. Нужно {cost} Stars, у вас {user_balance} Stars.",
+                    "payment_required": True,
+                    "cost": cost
+                }, status=402)
+            
+            # Списываем средства
+            if db.update_balance(user_id, -cost):
+                compatibility_text = await gemini_service.generate_compatibility(sign1, sign2)
+                db.log_request(user_id, f"compatibility_{sign1}_{sign2}", cost)
                 
-                if not await balance_service.update_balance(user_id, cost, "subtract"):
-                    return web.json_response({
-                        "success": False,
-                        "error": "Ошибка списания средств"
-                    }, status=500)
-            
-            compatibility_text = await gemini_service.generate_compatibility(sign1, sign2)
-            db.log_request(user_id, f"compatibility_{sign1}_{sign2}")
-            
-            return web.json_response({
-                "success": True,
-                "content": compatibility_text,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
-            })
-            
+                return web.json_response({
+                    "success": True,
+                    "content": compatibility_text,
+                    "cost": cost
+                })
+            else:
+                return web.json_response({
+                    "success": False,
+                    "error": "Ошибка списания средств"
+                }, status=500)
+                
         except Exception as e:
             logger.error(f"Error in handle_compatibility: {e}")
             return web.json_response({
@@ -219,41 +236,53 @@ class MiniAppAPI:
                     "error": "Не указан тип расклада"
                 }, status=400)
             
+            # Проверяем баланс пользователя
             cost = 888
-            if str(user_id) != str(ADMIN_ID):
-                if not await balance_service.can_afford(user_id, cost):
-                    return web.json_response({
-                        "success": False,
-                        "error": f"Недостаточно средств. Нужно {cost} звезд."
-                    }, status=402)
+            user_balance = db.get_user_balance(user_id)
+            
+            if user_balance < cost:
+                return web.json_response({
+                    "success": False,
+                    "error": f"Недостаточно средств. Нужно {cost} Stars, у вас {user_balance} Stars.",
+                    "payment_required": True,
+                    "cost": cost
+                }, status=402)
+            
+            # Списываем средства
+            if db.update_balance(user_id, -cost):
+                cards, positions = tarot_deck.create_spread(spread_type)
                 
-                if not await balance_service.update_balance(user_id, cost, "subtract"):
-                    return web.json_response({
-                        "success": False,
-                        "error": "Ошибка списания средств"
-                    }, status=500)
-            
-            cards, positions = tarot_deck.create_spread(spread_type)
-            spread_description = await self.create_tarot_prompt(spread_type, cards, positions)
-            interpretation = await gemini_service.generate_tarot_reading(spread_type, spread_description)
-            
-            formatted_cards = []
-            for i, card in enumerate(cards):
-                formatted_cards.append({
-                    "name": card["name"],
-                    "position": card["position"],
-                    "meaning": tarot_deck.get_card_meaning(card)
+                spread_description = ""
+                for i, card in enumerate(cards):
+                    position_name = positions[i] if i < len(positions) else f"Позиция {i+1}"
+                    orientation = "прямое" if card["position"] == "upright" else "перевернутое"
+                    spread_description += f"{position_name}: {card['name']} ({orientation})\n"
+                
+                interpretation = await gemini_service.generate_tarot_reading(spread_type, spread_description)
+                
+                formatted_cards = []
+                for i, card in enumerate(cards):
+                    formatted_cards.append({
+                        "name": card["name"],
+                        "position": card["position"],
+                        "meaning": tarot_deck.get_card_meaning(card),
+                        "position_name": positions[i] if i < len(positions) else f"Позиция {i+1}"
+                    })
+                
+                db.log_request(user_id, f"tarot_{spread_type}", cost)
+                
+                return web.json_response({
+                    "success": True,
+                    "cards": formatted_cards,
+                    "interpretation": interpretation,
+                    "cost": cost
                 })
-            
-            db.log_request(user_id, f"tarot_{spread_type}")
-            
-            return web.json_response({
-                "success": True,
-                "cards": formatted_cards,
-                "interpretation": interpretation,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
-            })
-            
+            else:
+                return web.json_response({
+                    "success": False,
+                    "error": "Ошибка списания средств"
+                }, status=500)
+                
         except Exception as e:
             logger.error(f"Error in handle_tarot: {e}")
             return web.json_response({
@@ -276,29 +305,34 @@ class MiniAppAPI:
                         "error": f"Не указано поле: {field}"
                     }, status=400)
             
+            # Проверяем баланс пользователя
             cost = 999
-            if str(user_id) != str(ADMIN_ID):
-                if not await balance_service.can_afford(user_id, cost):
-                    return web.json_response({
-                        "success": False,
-                        "error": f"Недостаточно средств. Нужно {cost} звезд."
-                    }, status=402)
+            user_balance = db.get_user_balance(user_id)
+            
+            if user_balance < cost:
+                return web.json_response({
+                    "success": False,
+                    "error": f"Недостаточно средств. Нужно {cost} Stars, у вас {user_balance} Stars.",
+                    "payment_required": True,
+                    "cost": cost
+                }, status=402)
+            
+            # Списываем средства
+            if db.update_balance(user_id, -cost):
+                natal_chart_text = await gemini_service.generate_natal_chart_interpretation(birth_data)
+                db.log_request(user_id, "natal_chart", cost)
                 
-                if not await balance_service.update_balance(user_id, cost, "subtract"):
-                    return web.json_response({
-                        "success": False,
-                        "error": "Ошибка списания средств"
-                    }, status=500)
-            
-            natal_chart_text = await gemini_service.generate_natal_chart_interpretation(birth_data)
-            db.log_request(user_id, "natal_chart")
-            
-            return web.json_response({
-                "success": True,
-                "content": natal_chart_text,
-                "cost": 0 if str(user_id) == str(ADMIN_ID) else cost
-            })
-            
+                return web.json_response({
+                    "success": True,
+                    "content": natal_chart_text,
+                    "cost": cost
+                })
+            else:
+                return web.json_response({
+                    "success": False,
+                    "error": "Ошибка списания средств"
+                }, status=500)
+                
         except Exception as e:
             logger.error(f"Error in handle_natal_chart: {e}")
             return web.json_response({
@@ -306,30 +340,185 @@ class MiniAppAPI:
                 "error": str(e)
             }, status=500)
 
-    async def handle_payment(self, request):
-        """Обработка платежей"""
+    async def handle_check_payment(self, request):
+        """Проверка возможности оплаты услуги"""
         try:
             data = await request.json()
             user_id = data.get('user_id')
-            amount = data.get('amount')
+            service_type = data.get('service_type')
             
-            if await payment_service.add_funds(user_id, amount):
-                return web.json_response({
-                    "success": True,
-                    "new_balance": await balance_service.get_balance(user_id)
-                })
-            else:
-                return web.json_response({
-                    "success": False,
-                    "error": "Ошибка пополнения баланса"
-                }, status=500)
-                
+            service_costs = {
+                'weekly_horoscope': 333,
+                'compatibility': 55,
+                'tarot': 888,
+                'natal_chart': 999
+            }
+            
+            cost = service_costs.get(service_type, 0)
+            user_balance = db.get_user_balance(user_id)
+            
+            can_afford = user_balance >= cost
+            
+            return web.json_response({
+                "success": True,
+                "can_afford": can_afford,
+                "user_balance": user_balance,
+                "service_cost": cost,
+                "remaining_balance": user_balance - cost if can_afford else user_balance
+            })
+            
         except Exception as e:
-            logger.error(f"Error in handle_payment: {e}")
+            logger.error(f"Error in handle_check_payment: {e}")
             return web.json_response({
                 "success": False,
                 "error": str(e)
             }, status=500)
+
+    async def handle_confirm_payment(self, request):
+        """Подтверждение оплаты и предоставление услуги"""
+        try:
+            data = await request.json()
+            user_id = data.get('user_id')
+            service_type = data.get('service_type')
+            service_data = data.get('service_data', {})
+            
+            service_costs = {
+                'weekly_horoscope': 333,
+                'compatibility': 55,
+                'tarot': 888,
+                'natal_chart': 999
+            }
+            
+            cost = service_costs.get(service_type, 0)
+            user_balance = db.get_user_balance(user_id)
+            
+            if user_balance < cost:
+                return web.json_response({
+                    "success": False,
+                    "error": f"Недостаточно средств. Нужно {cost} Stars, у вас {user_balance} Stars."
+                }, status=402)
+            
+            # Списываем средства
+            if not db.update_balance(user_id, -cost):
+                return web.json_response({
+                    "success": False,
+                    "error": "Ошибка списания средств"
+                }, status=500)
+            
+            # Предоставляем услугу
+            result = await self.provide_service(service_type, service_data, user_id)
+            
+            if result["success"]:
+                # Логируем запрос
+                if service_type == 'compatibility':
+                    sign1 = service_data.get('sign1', '')
+                    sign2 = service_data.get('sign2', '')
+                    db.log_request(user_id, f"compatibility_{sign1}_{sign2}", cost)
+                elif service_type == 'weekly_horoscope':
+                    zodiac_sign = service_data.get('zodiac_sign', '')
+                    db.log_request(user_id, f"weekly_horoscope_{zodiac_sign}", cost)
+                elif service_type == 'tarot':
+                    spread_type = service_data.get('spread_type', '')
+                    db.log_request(user_id, f"tarot_{spread_type}", cost)
+                elif service_type == 'natal_chart':
+                    db.log_request(user_id, "natal_chart", cost)
+                
+                result["cost"] = cost
+                result["new_balance"] = db.get_user_balance(user_id)
+                return web.json_response(result)
+            else:
+                # Возвращаем средства при ошибке
+                db.update_balance(user_id, cost)
+                return web.json_response({
+                    "success": False,
+                    "error": result.get("error", "Ошибка предоставления услуги")
+                }, status=500)
+                    
+        except Exception as e:
+            logger.error(f"Error in handle_confirm_payment: {e}")
+            # Возвращаем средства при исключении
+            db.update_balance(user_id, cost)
+            return web.json_response({
+                "success": False,
+                "error": str(e)
+            }, status=500)
+
+    async def provide_service(self, service_type: str, service_data: dict, user_id: int):
+        """Предоставление оплаченной услуги"""
+        try:
+            if service_type == 'compatibility':
+                sign1 = service_data.get('sign1')
+                sign2 = service_data.get('sign2')
+                if not sign1 or not sign2:
+                    return {"success": False, "error": "Не указаны знаки зодиака"}
+                
+                content = await gemini_service.generate_compatibility(sign1, sign2)
+                return {
+                    "success": True,
+                    "content": content,
+                    "service_type": "compatibility"
+                }
+                
+            elif service_type == 'weekly_horoscope':
+                zodiac_sign = service_data.get('zodiac_sign')
+                if not zodiac_sign:
+                    return {"success": False, "error": "Не указан знак зодиака"}
+                
+                content = await gemini_service.generate_weekly_horoscope(zodiac_sign)
+                return {
+                    "success": True,
+                    "content": content,
+                    "service_type": "weekly_horoscope"
+                }
+                
+            elif service_type == 'tarot':
+                spread_type = service_data.get('spread_type', 'daily')
+                cards, positions = tarot_deck.create_spread(spread_type)
+                
+                spread_description = ""
+                for i, card in enumerate(cards):
+                    position_name = positions[i] if i < len(positions) else f"Позиция {i+1}"
+                    orientation = "прямое" if card["position"] == "upright" else "перевернутое"
+                    spread_description += f"{position_name}: {card['name']} ({orientation})\n"
+                
+                interpretation = await gemini_service.generate_tarot_reading(spread_type, spread_description)
+                
+                formatted_cards = []
+                for i, card in enumerate(cards):
+                    formatted_cards.append({
+                        "name": card["name"],
+                        "position": card["position"],
+                        "meaning": tarot_deck.get_card_meaning(card),
+                        "position_name": positions[i] if i < len(positions) else f"Позиция {i+1}"
+                    })
+                
+                return {
+                    "success": True,
+                    "cards": formatted_cards,
+                    "interpretation": interpretation,
+                    "service_type": "tarot"
+                }
+                
+            elif service_type == 'natal_chart':
+                birth_data = service_data.get('birth_data', {})
+                required_fields = ['birth_date', 'birth_time', 'birth_place']
+                for field in required_fields:
+                    if not birth_data.get(field):
+                        return {"success": False, "error": f"Не указано поле: {field}"}
+                
+                content = await gemini_service.generate_natal_chart_interpretation(birth_data)
+                return {
+                    "success": True,
+                    "content": content,
+                    "service_type": "natal_chart"
+                }
+                
+            else:
+                return {"success": False, "error": f"Неизвестный тип услуги: {service_type}"}
+                
+        except Exception as e:
+            logger.error(f"Error in provide_service: {e}")
+            return {"success": False, "error": str(e)}
 
     async def handle_request_history(self, request):
         """Получение истории запросов"""
@@ -341,19 +530,13 @@ class MiniAppAPI:
             
             formatted_history = []
             for req in history:
-                cost = 0
-                if "weekly_horoscope" in req[0]:
-                    cost = 333
-                elif "compatibility" in req[0]:
-                    cost = 55
-                elif "tarot" in req[0]:
-                    cost = 888
-                elif "natal_chart" in req[0]:
-                    cost = 999
+                service_type = req[0]
+                date = req[1]
+                cost = req[2] if len(req) > 2 else 0
                 
                 formatted_history.append({
-                    "service": req[0],
-                    "date": req[1],
+                    "service": service_type,
+                    "date": date,
                     "cost": cost
                 })
             
@@ -368,37 +551,6 @@ class MiniAppAPI:
                 "success": False,
                 "error": str(e)
             }, status=500)
-
-    async def create_tarot_prompt(self, spread_type, cards, positions):
-        """Создание промпта для Gemini на основе выпавших карт"""
-        spread_descriptions = {
-            "celtic": "Кельтский крест - глубокий анализ текущей ситуации и ее развития",
-            "three": "Расклад на три карты: Прошлое, Настоящее, Будущее",
-            "four": "Расклад на четыре карты: Ситуация, Вызовы, Совет, Результат", 
-            "daily": "Карта дня - совет на сегодняшний день"
-        }
-        
-        prompt = f"Проинтерпретируй расклад Таро: {spread_descriptions.get(spread_type, spread_type)}\n\nВыпавшие карты и их позиции:"
-        
-        for i, card in enumerate(cards):
-            position = positions[i] if i < len(positions) else f"Позиция {i+1}"
-            orientation = "прямое" if card["position"] == "upright" else "перевернутое"
-            meaning = tarot_deck.get_card_meaning(card)
-            prompt += f"\n- {position}: {card['name']} ({orientation} положение) - {meaning}"
-        
-        prompt += """
-        \n\nПроанализируй:
-        1. Общую энергетику расклада
-        2. Значение каждой карты в ее позиции
-        3. Взаимосвязи между картами
-        4. Практические рекомендации
-        5. Потенциальные развития ситуации
-        
-        Будь мудрым и поддерживающим. Избегай категоричных предсказаний.
-        Объем: 300-400 слов. На русском языке.
-        """
-        
-        return prompt
 
     async def start(self):
         """Запуск API сервера"""

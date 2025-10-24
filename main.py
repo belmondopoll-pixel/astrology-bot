@@ -1,4 +1,4 @@
-# main.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# main.py
 import asyncio
 import logging
 import os
@@ -22,7 +22,7 @@ try:
     from config import BOT_TOKEN
     from database import db
     from handlers.user_handlers import router
-    from api.server import miniapp_api  # РАСКОММЕНТИРОВАТЬ!
+    from api.server import miniapp_api
 except ImportError as e:
     logger.error(f"❌ Ошибка импорта: {e}")
     import traceback
@@ -53,7 +53,7 @@ async def main():
         
         logger.info("✅ Бот инициализирован, запускаем поллинг...")
         
-        # ЗАПУСКАЕМ API СЕРВЕР - РАСКОММЕНТИРОВАТЬ!
+        # ЗАПУСКАЕМ API СЕРВЕР
         try:
             asyncio.create_task(miniapp_api.start())
             logger.info("✅ API сервер запущен на порту 8080")
