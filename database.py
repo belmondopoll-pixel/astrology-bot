@@ -25,7 +25,7 @@ class Database:
                         birth_date TEXT,
                         birth_time TEXT,
                         birth_place TEXT,
-                        balance INTEGER DEFAULT 100,
+                        balance INTEGER DEFAULT 0,
                         subscription_type TEXT DEFAULT 'free',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -41,6 +41,7 @@ class Database:
                         amount_stars INTEGER NOT NULL,
                         status TEXT DEFAULT 'completed',
                         payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        payment_data TEXT,
                         FOREIGN KEY (user_id) REFERENCES users (telegram_id)
                     )
                 ''')
