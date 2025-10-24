@@ -10,7 +10,8 @@ import logging
 from database import db
 from keyboards import main_menu, zodiac_keyboard, web_app_keyboard, get_webapp_url
 from services.gemini_service import gemini_service
-from services.miniapp_service import miniapp_service
+# Временно закомментируем проблемный импорт
+# from services.miniapp_service import miniapp_service
 
 # Импортируем обработчики платных услуг
 from .paid_services import router as paid_router
@@ -197,21 +198,22 @@ async def handle_web_app_data(message: Message):
                 db.update_user_zodiac(user_id, zodiac_sign)
                 await message.answer(f"✅ Знак зодиака обновлен: {zodiac_sign}")
                 
-        elif action == 'process_service':
-            # Обработка услуги из MiniApp
-            service_type = data.get('service_type')
-            service_data = data.get('data', {})
-            
-            result = await miniapp_service.process_miniapp_request(
-                user_id,
-                service_type,
-                service_data
-            )
-            
-            if result['success']:
-                await message.answer(f"✅ {service_type} выполнен!")
-            else:
-                await message.answer(f"❌ Ошибка: {result['error']}")
+        # Временно отключаем обработку платных услуг через MiniApp
+        # elif action == 'process_service':
+        #     # Обработка услуги из MiniApp
+        #     service_type = data.get('service_type')
+        #     service_data = data.get('data', {})
+        #     
+        #     result = await miniapp_service.process_miniapp_request(
+        #         user_id,
+        #         service_type,
+        #         service_data
+        #     )
+        #     
+        #     if result['success']:
+        #         await message.answer(f"✅ {service_type} выполнен!")
+        #     else:
+        #         await message.answer(f"❌ Ошибка: {result['error']}")
                 
         else:
             await message.answer("✅ Данные из MiniApp получены")

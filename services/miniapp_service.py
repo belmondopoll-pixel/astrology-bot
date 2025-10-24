@@ -2,7 +2,6 @@
 import logging
 from typing import Dict, Any
 from database import db
-from services.direct_payment_service import direct_payment_service
 from config import ADMIN_ID
 
 logger = logging.getLogger(__name__)
