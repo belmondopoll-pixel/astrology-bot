@@ -5,26 +5,7 @@ import os
 import sys
 from datetime import datetime
 
-sys.path.append(os.path.dirname(__file__))
-
-# main.py - добавьте после импортов
-logger.info("🔄 Начинается инициализация бота...")
-
-try:
-    from config import BOT_TOKEN
-    from database import db
-    from handlers import main_router
-    # from api.server import miniapp_api  # Временно закомментируем
-    
-    logger.info("✅ Все модули успешно импортированы")
-    
-except ImportError as e:
-    logger.error(f"❌ Ошибка импорта: {e}")
-    import traceback
-    logger.error(f"❌ Traceback: {traceback.format_exc()}")
-    sys.exit(1)
-
-# Настройка логирования
+# НАСТРОЙКА ЛОГИРОВАНИЯ ДОЛЖНА БЫТЬ ПЕРВОЙ!
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -35,12 +16,18 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+sys.path.append(os.path.dirname(__file__))
+
+logger.info("🔄 Начинается инициализация бота...")
+
 try:
     from config import BOT_TOKEN
     from database import db
-    # Импортируем единый главный роутер
     from handlers import main_router
     # from api.server import miniapp_api  # Временно закомментируем
+    
+    logger.info("✅ Все модули успешно импортированы")
+    
 except ImportError as e:
     logger.error(f"❌ Ошибка импорта: {e}")
     import traceback
