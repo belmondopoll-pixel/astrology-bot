@@ -7,6 +7,23 @@ from datetime import datetime
 
 sys.path.append(os.path.dirname(__file__))
 
+# main.py - добавьте после импортов
+logger.info("🔄 Начинается инициализация бота...")
+
+try:
+    from config import BOT_TOKEN
+    from database import db
+    from handlers import main_router
+    # from api.server import miniapp_api  # Временно закомментируем
+    
+    logger.info("✅ Все модули успешно импортированы")
+    
+except ImportError as e:
+    logger.error(f"❌ Ошибка импорта: {e}")
+    import traceback
+    logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    sys.exit(1)
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,

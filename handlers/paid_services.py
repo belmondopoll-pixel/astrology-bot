@@ -19,13 +19,22 @@ class NatalChartStates(StatesGroup):
     waiting_birth_time = State()
     waiting_birth_place = State()
 
+# ==================== ДИАГНОСТИКА ====================
+
+@router.message()
+async def debug_paid_messages(message: Message):
+    """Диагностический обработчик для платных услуг"""
+    if message.text in ["💑 Совместимость (55 Stars)", "📅 Гороскоп на неделю (333 Stars)", 
+                       "🃏 Расклад Таро (888 Stars)", "🌌 Натальная карта (999 Stars)"]:
+        logger.info(f"🔍 Платная услуга получена но не обработана: {message.text} от пользователя {message.from_user.id}")
+
 # ==================== ОБРАБОТЧИКИ ПЛАТНЫХ УСЛУГ ====================
 
 @router.message(F.text == "💑 Совместимость (55 Stars)")
 async def compatibility_handler(message: Message):
     """Обработчик совместимости"""
     try:
-        logger.info(f"🔄 Совместимость вызвана пользователем {message.from_user.id}")
+        logger.info(f"🎯 Обработчик совместимости ВЫЗВАН для пользователя {message.from_user.id}")
         
         await message.answer(
             "💑 <b>Анализ совместимости</b>\n\n"
@@ -43,6 +52,7 @@ async def process_first_sign(callback: CallbackQuery, state: FSMContext):
     try:
         await callback.answer()
         sign = callback.data.split("_")[2]
+        logger.info(f"🎯 Обработчик первого знака: {sign}")
         
         await state.update_data(first_sign=sign)
         
@@ -64,6 +74,8 @@ async def process_second_sign(callback: CallbackQuery, state: FSMContext):
         user_data = await state.get_data()
         first_sign = user_data.get('first_sign')
         user_id = callback.from_user.id
+        
+        logger.info(f"🎯 Обработчик второго знака: {second_sign}, первый: {first_sign}")
         
         if not first_sign:
             await callback.message.edit_text("❌ Не выбран первый знак. Начните заново.")
@@ -97,7 +109,7 @@ async def process_second_sign(callback: CallbackQuery, state: FSMContext):
 async def weekly_horoscope_handler(message: Message):
     """Обработчик недельного гороскопа"""
     try:
-        logger.info(f"🔄 Недельный гороскоп вызван пользователем {message.from_user.id}")
+        logger.info(f"🎯 Обработчик недельного гороскопа ВЫЗВАН для пользователя {message.from_user.id}")
         
         await message.answer(
             "📅 <b>Гороскоп на неделю</b>\n\n"
@@ -115,6 +127,8 @@ async def process_weekly_horoscope(callback: CallbackQuery):
         await callback.answer()
         zodiac_sign = callback.data.split("_")[2]
         user_id = callback.from_user.id
+        
+        logger.info(f"🎯 Обработчик недельного гороскопа для: {zodiac_sign}")
         
         await callback.message.edit_text(
             f"📅 <b>Генерирую гороскоп на неделю для {zodiac_sign}...</b>\n\n"
@@ -142,7 +156,7 @@ async def process_weekly_horoscope(callback: CallbackQuery):
 async def tarot_handler(message: Message):
     """Обработчик расклада Таро"""
     try:
-        logger.info(f"🔄 Таро вызвано пользователем {message.from_user.id}")
+        logger.info(f"🎯 Обработчик Таро ВЫЗВАН для пользователя {message.from_user.id}")
         
         await message.answer(
             "🃏 <b>Расклад карт Таро</b>\n\n"
@@ -161,6 +175,8 @@ async def process_tarot_spread(callback: CallbackQuery):
         await callback.answer()
         spread_type = callback.data.split("_")[1]
         user_id = callback.from_user.id
+        
+        logger.info(f"🎯 Обработчик Таро для расклада: {spread_type}")
         
         spread_names = {
             "celtic": "Кельтский крест",
@@ -216,7 +232,7 @@ async def process_tarot_spread(callback: CallbackQuery):
 async def natal_chart_handler(message: Message, state: FSMContext):
     """Обработчик натальной карты"""
     try:
-        logger.info(f"🔄 Натальная карта вызвана пользователем {message.from_user.id}")
+        logger.info(f"🎯 Обработчик натальной карты ВЫЗВАН для пользователя {message.from_user.id}")
         
         await message.answer(
             "🌌 <b>Натальная карта</b>\n\n"
@@ -238,6 +254,8 @@ async def process_birth_date(message: Message, state: FSMContext):
     """Обработка даты рождения"""
     birth_date = message.text.strip()
     
+    logger.info(f"🎯 Обработка даты рождения: {birth_date}")
+    
     if not await validate_date_format(birth_date):
         await message.answer("❌ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например, 15.05.1990):")
         return
@@ -250,6 +268,8 @@ async def process_birth_date(message: Message, state: FSMContext):
 async def process_birth_time(message: Message, state: FSMContext):
     """Обработка времени рождения"""
     birth_time = message.text.strip()
+    
+    logger.info(f"🎯 Обработка времени рождения: {birth_time}")
     
     if not await validate_time_format(birth_time):
         await message.answer("❌ Неверный формат времени. Пожалуйста, введите время в формате ЧЧ:ММ (например, 14:30):")
@@ -265,6 +285,8 @@ async def process_birth_place(message: Message, state: FSMContext):
     birth_place = message.text.strip()
     user_id = message.from_user.id
     user_data = await state.get_data()
+    
+    logger.info(f"🎯 Обработка места рождения: {birth_place}")
     
     if not birth_place:
         await message.answer("❌ Место рождения не может быть пустым. Пожалуйста, введите место рождения:")

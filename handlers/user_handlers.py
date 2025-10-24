@@ -201,8 +201,3 @@ async def handle_web_app_data(message: Message):
     except Exception as e:
         logger.error(f"Ошибка обработки WebApp данных: {e}")
         await message.answer("❌ Произошла ошибка при обработке данных из MiniApp")
-
-@router.message()
-async def debug_all_messages(message: Message):
-    """Обработчик для диагностики необработанных сообщений"""
-    logger.info(f"🔍 Необработанное сообщение: user_id={message.from_user.id}, text='{message.text}'")
