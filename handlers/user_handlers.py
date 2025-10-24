@@ -10,17 +10,14 @@ import logging
 from database import db
 from keyboards import main_menu, zodiac_keyboard, web_app_keyboard, get_webapp_url
 from services.gemini_service import gemini_service
-# Временно закомментируем проблемный импорт
-# from services.miniapp_service import miniapp_service
 
-# Импортируем обработчики платных услуг
-from .paid_services import router as paid_router
+# УБЕДИТЕСЬ ЧТО ЭТИХ СТРОК НЕТ:
+# from .paid_services import router as paid_router
+# router.include_router(paid_router)
 
 logger = logging.getLogger(__name__)
 
 router = Router()
-# Включаем роутер платных услуг
-router.include_router(paid_router)
 
 class UserStates(StatesGroup):
     waiting_for_zodiac = State()
@@ -165,7 +162,7 @@ async def cmd_buy_tokens(message: Message):
         "2. Выберите вашего бота\n"
         "3. Нажмите \"Payments\"\n"
         "4. Следуйте инструкциям для настройки платежей\n\n"
-        "После настройки пользователи смогут отправлять вам Stars напрямую через бота!"
+        "После настройки пользователи смогут отправлять вам Stars напрямую через бota!"
     )
 
 @router.message(Command("app"))
@@ -198,23 +195,6 @@ async def handle_web_app_data(message: Message):
                 db.update_user_zodiac(user_id, zodiac_sign)
                 await message.answer(f"✅ Знак зодиака обновлен: {zodiac_sign}")
                 
-        # Временно отключаем обработку платных услуг через MiniApp
-        # elif action == 'process_service':
-        #     # Обработка услуги из MiniApp
-        #     service_type = data.get('service_type')
-        #     service_data = data.get('data', {})
-        #     
-        #     result = await miniapp_service.process_miniapp_request(
-        #         user_id,
-        #         service_type,
-        #         service_data
-        #     )
-        #     
-        #     if result['success']:
-        #         await message.answer(f"✅ {service_type} выполнен!")
-        #     else:
-        #         await message.answer(f"❌ Ошибка: {result['error']}")
-                
         else:
             await message.answer("✅ Данные из MiniApp получены")
             
@@ -226,4 +206,3 @@ async def handle_web_app_data(message: Message):
 async def debug_all_messages(message: Message):
     """Обработчик для диагностики необработанных сообщений"""
     logger.info(f"🔍 Необработанное сообщение: user_id={message.from_user.id}, text='{message.text}'")
-    # Не отвечаем автоматически, чтобы не спамить пользователя

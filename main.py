@@ -21,9 +21,8 @@ logger = logging.getLogger(__name__)
 try:
     from config import BOT_TOKEN
     from database import db
-    # Импортируем оба роутера
-    from handlers.user_handlers import router as user_router
-    from handlers.paid_services import router as paid_router
+    # Импортируем единый главный роутер
+    from handlers import main_router
     # from api.server import miniapp_api  # Временно закомментируем
 except ImportError as e:
     logger.error(f"❌ Ошибка импорта: {e}")
@@ -50,9 +49,8 @@ async def main():
         )
         dp = Dispatcher()
         
-        # Регистрация ВСЕХ роутеров
-        dp.include_router(paid_router)  # Сначала платные услуги
-        dp.include_router(user_router)  # Затем пользовательские
+        # Регистрируем ЕДИНЫЙ главный роутер
+        dp.include_router(main_router)
         
         logger.info("✅ Бот инициализирован, запускаем поллинг...")
         
