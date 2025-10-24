@@ -1,18 +1,25 @@
-# user_handlers.py
+# handlers/user_handlers.py
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, WebAppInfo
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+import json
 import logging
 
 from database import db
 from keyboards import main_menu, zodiac_keyboard, web_app_keyboard, get_webapp_url
 from services.gemini_service import gemini_service
+from services.miniapp_service import miniapp_service
+
+# Импортируем обработчики платных услуг
+from .paid_services import router as paid_router
 
 logger = logging.getLogger(__name__)
 
 router = Router()
+# Включаем роутер платных услуг
+router.include_router(paid_router)
 
 class UserStates(StatesGroup):
     waiting_for_zodiac = State()
@@ -160,8 +167,61 @@ async def cmd_buy_tokens(message: Message):
         "После настройки пользователи смогут отправлять вам Stars напрямую через бота!"
     )
 
+@router.message(Command("app"))
+async def cmd_app(message: Message):
+    """Открыть MiniApp через команду"""
+    await message.answer(
+        f"📱 <b>MiniApp для АстроБота</b>\n\n"
+        f"URL: {get_webapp_url()}\n\n"
+        "Нажмите кнопку '📱 Открыть MiniApp' в меню "
+        "или используйте кнопку ниже:",
+        reply_markup=web_app_keyboard()
+    )
+
+@router.message(F.web_app_data)
+async def handle_web_app_data(message: Message):
+    """Обработка данных из MiniApp"""
+    try:
+        data = json.loads(message.web_app_data.data)
+        user_id = message.from_user.id
+        
+        logger.info(f"📱 Получены данные из MiniApp: {data}")
+        
+        # Обрабатываем разные типы данных из MiniApp
+        action = data.get('action')
+        
+        if action == 'sync_user_data':
+            # Синхронизация данных пользователя
+            zodiac_sign = data.get('zodiac_sign')
+            if zodiac_sign:
+                db.update_user_zodiac(user_id, zodiac_sign)
+                await message.answer(f"✅ Знак зодиака обновлен: {zodiac_sign}")
+                
+        elif action == 'process_service':
+            # Обработка услуги из MiniApp
+            service_type = data.get('service_type')
+            service_data = data.get('data', {})
+            
+            result = await miniapp_service.process_miniapp_request(
+                user_id,
+                service_type,
+                service_data
+            )
+            
+            if result['success']:
+                await message.answer(f"✅ {service_type} выполнен!")
+            else:
+                await message.answer(f"❌ Ошибка: {result['error']}")
+                
+        else:
+            await message.answer("✅ Данные из MiniApp получены")
+            
+    except Exception as e:
+        logger.error(f"Ошибка обработки WebApp данных: {e}")
+        await message.answer("❌ Произошла ошибка при обработке данных из MiniApp")
+
 @router.message()
-async def debug_handler(message: Message):
+async def debug_all_messages(message: Message):
     """Обработчик для диагностики необработанных сообщений"""
-    logger.info(f"🔍 Необработанное сообщение: {message.text} от пользователя {message.from_user.id}")
-    await message.answer("Извините, я не понял ваше сообщение. Используйте меню для навигации.")
+    logger.info(f"🔍 Необработанное сообщение: user_id={message.from_user.id}, text='{message.text}'")
+    # Не отвечаем автоматически, чтобы не спамить пользователя
