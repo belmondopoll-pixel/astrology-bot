@@ -3,67 +3,73 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
 
-# НАСТРОЙКА ЛОГИРОВАНИЯ ДОЛЖНА БЫТЬ ПЕРВОЙ!
+# НАСТРОЙКА ЛОГИРОВАНИЯ ДОЛЖНА БЫТЬ САМОЙ ПЕРВОЙ СТРОКОЙ КОДА
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler()
+        logging.StreamHandler(sys.stdout)
     ]
 )
 
+# СОЗДАЕМ ЛОГГЕР СРАЗУ ПОСЛЕ НАСТРОЙКИ
 logger = logging.getLogger(__name__)
 
-sys.path.append(os.path.dirname(__file__))
+def setup_environment():
+    """Настройка окружения"""
+    logger.info("🔄 Настройка окружения...")
+    sys.path.append(os.path.dirname(__file__))
+    logger.info(f"✅ Python path: {sys.path}")
 
-logger.info("🔄 Начинается инициализация бота...")
-
-try:
-    from config import BOT_TOKEN
-    from database import db
-    from handlers import main_router
-    # from api.server import miniapp_api  # Временно закомментируем
-    
-    logger.info("✅ Все модули успешно импортированы")
-    
-except ImportError as e:
-    logger.error(f"❌ Ошибка импорта: {e}")
-    import traceback
-    logger.error(f"❌ Traceback: {traceback.format_exc()}")
-    sys.exit(1)
-
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
+def import_modules():
+    """Импорт модулей с обработкой ошибок"""
+    try:
+        logger.info("🔄 Импорт модулей...")
+        
+        from config import BOT_TOKEN, GEMINI_API_KEY, ADMIN_ID
+        from database import db
+        from handlers import main_router
+        
+        logger.info("✅ Все модули успешно импортированы")
+        return BOT_TOKEN, db, main_router
+        
+    except ImportError as e:
+        logger.error(f"❌ Ошибка импорта модулей: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        sys.exit(1)
 
 async def main():
     """Основная функция запуска бота"""
+    logger.info("🚀 Запуск бота...")
+    
+    # Настройка окружения и импорт модулей
+    setup_environment()
+    BOT_TOKEN, db, main_router = import_modules()
+    
     if not BOT_TOKEN or BOT_TOKEN == "ваш_токен_бота":
         logger.error("❌ BOT_TOKEN не настроен! Проверьте файл .env")
         return
 
     try:
+        from aiogram import Bot, Dispatcher
+        from aiogram.client.default import DefaultBotProperties
+        from aiogram.enums import ParseMode
+        
         # Инициализация бота
+        logger.info("🔄 Инициализация бота...")
         bot = Bot(
             token=BOT_TOKEN,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML)
         )
         dp = Dispatcher()
         
-        # Регистрируем ЕДИНЫЙ главный роутер
+        # Регистрируем роутер
         dp.include_router(main_router)
         
-        logger.info("✅ Бот инициализирован, запускаем поллинг...")
-        
-        # ВРЕМЕННО ЗАКОММЕНТИРУЕМ API СЕРВЕР
-        # try:
-        #     asyncio.create_task(miniapp_api.start())
-        #     logger.info("✅ API сервер запущен на порту 8080")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ API сервер не запустился: {e}")
+        logger.info("✅ Бот инициализирован")
+        logger.info("🔄 Запуск поллинга...")
         
         # Запуск бота
         await bot.delete_webhook(drop_pending_updates=True)
@@ -75,7 +81,6 @@ async def main():
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
 
 if __name__ == "__main__":
-    logger.info("🚀 Запуск бота...")
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
