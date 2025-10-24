@@ -21,8 +21,10 @@ logger = logging.getLogger(__name__)
 try:
     from config import BOT_TOKEN
     from database import db
-    from handlers.user_handlers import router
-    from api.server import miniapp_api
+    # Импортируем оба роутера
+    from handlers.user_handlers import router as user_router
+    from handlers.paid_services import router as paid_router
+    # from api.server import miniapp_api  # Временно закомментируем
 except ImportError as e:
     logger.error(f"❌ Ошибка импорта: {e}")
     import traceback
@@ -48,17 +50,18 @@ async def main():
         )
         dp = Dispatcher()
         
-        # Регистрация роутеров
-        dp.include_router(router)
+        # Регистрация ВСЕХ роутеров
+        dp.include_router(paid_router)  # Сначала платные услуги
+        dp.include_router(user_router)  # Затем пользовательские
         
         logger.info("✅ Бот инициализирован, запускаем поллинг...")
         
-        # ЗАПУСКАЕМ API СЕРВЕР
-        try:
-            asyncio.create_task(miniapp_api.start())
-            logger.info("✅ API сервер запущен на порту 8080")
-        except Exception as e:
-            logger.warning(f"⚠️ API сервер не запустился: {e}")
+        # ВРЕМЕННО ЗАКОММЕНТИРУЕМ API СЕРВЕР
+        # try:
+        #     asyncio.create_task(miniapp_api.start())
+        #     logger.info("✅ API сервер запущен на порту 8080")
+        # except Exception as e:
+        #     logger.warning(f"⚠️ API сервер не запустился: {e}")
         
         # Запуск бота
         await bot.delete_webhook(drop_pending_updates=True)
