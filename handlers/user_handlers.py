@@ -142,16 +142,6 @@ async def general_info_handler(message: Message):
     
     await message.answer(info_text)
 
-@router.message(Command("balance"))
-async def cmd_balance(message: Message):
-    """Показать баланс пользователя"""
-    user_balance = db.get_user_balance(message.from_user.id)
-    await message.answer(
-        f"💰 <b>Ваш баланс</b>\n\n"
-        f"Доступно: <b>{user_balance} Telegram Stars</b>\n\n"
-        f"Для пополнения баланса используйте команду /buy_tokens"
-    )
-
 @router.message(Command("buy_tokens"))
 async def cmd_buy_tokens(message: Message):
     """Покупка токенов"""
