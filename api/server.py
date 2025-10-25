@@ -42,19 +42,31 @@ class MiniAppAPI:
     def setup_middlewares(self):
         """Настройка middleware для CORS"""
         @web.middleware
-        async def cors_middleware(request, handler):
-            if request.method == 'OPTIONS':
-                response = web.Response()
-            else:
-                response = await handler(request)
-            
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            return response
+    async def cors_middleware(request, handler):
+        # Разрешаем конкретные домены
+        allowed_origins = [
+            'https://your-app-name.netlify.app',
+            'https://inspiring-dodol-70b9e9.netlify.app',
+            'https://telegram-web-app.github.io'  # Для тестов
+        ]
         
-        self.app.middlewares.append(cors_middleware)
+        origin = request.headers.get('Origin', '')
+        if origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+        
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS, PUT, DELETE'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, X-Telegram-Init-Data'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        if request.method == 'OPTIONS':
+            return web.Response(status=200)
+        else:
+            response = await handler(request)
+            return response
+    
+    self.app.middlewares.append(cors_middleware)
 
     async def handle_options(self, request):
         """Обработчик OPTIONS запросов для CORS"""
